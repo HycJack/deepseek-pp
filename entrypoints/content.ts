@@ -7,11 +7,13 @@ import type {
   ToolCall,
   ToolCardResult,
   ToolCallRestoreRecord,
+  ToolDescriptor,
   ToolExecutionRecord,
 } from '../core/types';
-import { TOOL_NAMES } from '../core/constants';
+import { DEFAULT_TOOL_DESCRIPTORS } from '../core/tool/invocation';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
+import type { ResponseCompletePayload } from '../core/interceptor/fetch-hook';
 import {
   AUTOMATION_BRIDGE_TIMEOUT_MS,
   AUTOMATION_WINDOW_RUN_REQUEST,
@@ -25,9 +27,6 @@ import type { AutomationRunnerRequest, AutomationRunnerResult } from '../core/au
 const TOOL_BLOCK_ID = 'dpp-tool-block';
 const TOOL_BLOCK_STYLE_ID = 'dpp-tool-block-css';
 const TOOL_RESTORE_STORAGE_KEY = 'dpp_tool_execution_blocks';
-const TOOL_TAG_PATTERN = TOOL_NAMES.map(escapeRegExp).join('|');
-const TOOL_OPEN_TAG_RE = new RegExp(`<\\s*(${TOOL_TAG_PATTERN})\\s*>`, 'i');
-const TOOL_MARKER_RE = new RegExp(`<\\s*/?\\s*(?:${TOOL_TAG_PATTERN})\\s*>`, 'i');
 
 interface PersistedToolBlock extends ToolCallRestoreRecord {
   source: 'storage';
@@ -42,50 +41,71 @@ let restoredRenderTimer: ReturnType<typeof setTimeout> | null = null;
 let restoredRenderAttempts = 0;
 const pendingToolExecutionTasks = new Set<Promise<ToolCardResult>>();
 let backgroundPatchObserver: MutationObserver | null = null;
+const manualContinuationDepth = new Map<string, number>();
+const MANUAL_TOOL_CONTINUATION_LIMIT = 3;
+let currentMemories: Memory[] = [];
+let currentSkills: Skill[] = [];
+let currentActivePreset: SystemPromptPreset | null = null;
+let currentModelType: ModelType = null;
+let currentToolDescriptors: ToolDescriptor[] = [...DEFAULT_TOOL_DESCRIPTORS];
+let toolOpenTagRe = buildToolOpenTagRegex(currentToolDescriptors);
+let toolMarkerRe = buildToolMarkerRegex(currentToolDescriptors);
+let extensionContextValid = true;
 
 export default defineContentScript({
   matches: ['*://chat.deepseek.com/*'],
   runAt: 'document_start',
   async main() {
+    installExtensionInvalidationGuards();
+
     const handleMainWorldMessage = async (event: MessageEvent) => {
       if (event.data?.source !== 'deepseek-pp-main') return;
 
-      switch (event.data.type) {
-        case 'TOOL_CALL': {
-          const call = event.data.data as ToolCall;
-          void runToolExecution(call);
-          break;
-        }
-        case 'EXECUTE_TOOL_CALL': {
-          const call = event.data.data as ToolCall;
-          const id = event.data.id as string;
-          const result = await runToolExecution(call);
-          window.postMessage({
-            source: 'deepseek-pp-content',
-            type: 'TOOL_CALL_RESULT',
-            id,
-            result,
-          });
-          break;
-        }
-        case 'RESTORE_TOOL_CALLS': {
-          rememberRestoredToolRecords(event.data.records as ToolCallRestoreRecord[]);
-          break;
-        }
-        case 'MEMORIES_USED': {
-          const ids = event.data.ids as number[];
-          await chrome.runtime.sendMessage({ type: 'TOUCH_MEMORIES', payload: { ids } });
-          break;
-        }
-        case 'RESPONSE_COMPLETE': {
-          await waitForPendingToolExecutions();
-          if (toolExecutions.length > 0) {
-            await persistToolExecutions(toolExecutions, event.data.text as string | undefined);
-            collapseToolBlock();
-            toolExecutions = [];
-            toolBlockEl = null;
+      try {
+        switch (event.data.type) {
+          case 'TOOL_CALL': {
+            const call = event.data.data as ToolCall;
+            void runToolExecution(call);
+            break;
           }
-          break;
+          case 'EXECUTE_TOOL_CALL': {
+            const call = event.data.data as ToolCall;
+            const id = event.data.id as string;
+            const result = await runToolExecution(call);
+            window.postMessage({
+              source: 'deepseek-pp-content',
+              type: 'TOOL_CALL_RESULT',
+              id,
+              result,
+            });
+            break;
+          }
+          case 'RESTORE_TOOL_CALLS': {
+            rememberRestoredToolRecords(event.data.records as ToolCallRestoreRecord[]);
+            break;
+          }
+          case 'MEMORIES_USED': {
+            const ids = event.data.ids as number[];
+            await sendRuntimeMessage({ type: 'TOUCH_MEMORIES', payload: { ids } });
+            break;
+          }
+          case 'RESPONSE_COMPLETE': {
+            const complete = normalizeResponseCompletePayload(event.data.payload, event.data.text);
+            await waitForPendingToolExecutions();
+            const completedExecutions = [...toolExecutions];
+            if (toolExecutions.length > 0) {
+              await persistToolExecutions(toolExecutions, complete.text);
+              collapseToolBlock();
+              toolExecutions = [];
+              toolBlockEl = null;
+            }
+            void continueManualChatWithToolResults(complete, completedExecutions);
+            break;
+          }
+        }
+      } catch (error) {
+        if (isExtensionInvalidatedError(error)) {
+          invalidateExtensionContext();
         }
       }
     };
@@ -97,22 +117,23 @@ export default defineContentScript({
       else document.addEventListener('DOMContentLoaded', () => r(undefined), { once: true });
     });
 
-    const [memories, skills, activePreset, modelType] = await Promise.all([
-      chrome.runtime.sendMessage({ type: 'GET_MEMORIES' }),
-      chrome.runtime.sendMessage({ type: 'GET_SKILLS' }),
-      chrome.runtime.sendMessage({ type: 'GET_ACTIVE_PRESET' }),
-      chrome.runtime.sendMessage({ type: 'GET_MODEL_TYPE' }),
+    const [memories, skills, activePreset, modelType, toolDescriptors] = await Promise.all([
+      sendRuntimeMessage<Memory[]>({ type: 'GET_MEMORIES' }),
+      sendRuntimeMessage<Skill[]>({ type: 'GET_SKILLS' }),
+      sendRuntimeMessage<SystemPromptPreset | null>({ type: 'GET_ACTIVE_PRESET' }),
+      sendRuntimeMessage<ModelType>({ type: 'GET_MODEL_TYPE' }),
+      sendRuntimeMessage<ToolDescriptor[]>({ type: 'GET_TOOL_DESCRIPTORS' }),
     ]);
 
-    syncToMainWorld(memories ?? [], skills ?? [], activePreset, modelType);
+    syncToMainWorld(memories ?? [], skills ?? [], activePreset ?? null, modelType ?? null, normalizeToolDescriptors(toolDescriptors));
     startRenderedToolCallCleaner();
     void restorePersistedToolBlocks();
 
-    chrome.runtime.sendMessage({ type: 'GET_BACKGROUND' }).then((cfg: BackgroundConfig | null) => {
-      applyBackground(cfg);
+    sendRuntimeMessage<BackgroundConfig | null>({ type: 'GET_BACKGROUND' }).then((cfg) => {
+      applyBackground(cfg ?? null);
     });
 
-    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    addRuntimeMessageListener((message, _sender, sendResponse) => {
       if (isAutomationContentRunMessage(message)) {
         forwardAutomationRunToMainWorld(message.payload)
           .then(sendResponse)
@@ -131,7 +152,13 @@ export default defineContentScript({
       }
 
       if (message.type === 'STATE_UPDATED') {
-        syncToMainWorld(message.memories, message.skills, message.activePreset, message.modelType);
+        syncToMainWorld(message.memories, message.skills, message.activePreset, message.modelType, currentToolDescriptors);
+      } else if (message.type === 'TOOL_DESCRIPTORS_UPDATED') {
+        syncToMainWorld(currentMemories, currentSkills, currentActivePreset, currentModelType, normalizeToolDescriptors(message.toolDescriptors));
+      } else if (message.type === 'MCP_SERVERS_UPDATED') {
+        sendRuntimeMessage<ToolDescriptor[]>({ type: 'GET_TOOL_DESCRIPTORS' })
+          .then((descriptors) => syncToMainWorld(currentMemories, currentSkills, currentActivePreset, currentModelType, normalizeToolDescriptors(descriptors)))
+          .catch(() => undefined);
       } else if (message.type === 'BACKGROUND_UPDATED') {
         applyBackground(message.config as BackgroundConfig | null);
       }
@@ -139,6 +166,121 @@ export default defineContentScript({
     });
   },
 });
+
+function hasLiveExtensionContext(): boolean {
+  if (!extensionContextValid) return false;
+
+  try {
+    if (typeof chrome === 'undefined') return false;
+    const runtime = chrome.runtime;
+    return Boolean(runtime?.id) && typeof runtime.sendMessage === 'function';
+  } catch (error) {
+    if (isExtensionInvalidatedError(error)) {
+      invalidateExtensionContext();
+    }
+    return false;
+  }
+}
+
+function installExtensionInvalidationGuards() {
+  const suppressInvalidation = (event: PromiseRejectionEvent | ErrorEvent) => {
+    const error = 'reason' in event ? event.reason : event.error ?? event.message;
+    if (!isExtensionInvalidatedError(error)) return;
+    invalidateExtensionContext();
+    event.preventDefault();
+  };
+
+  window.addEventListener('unhandledrejection', suppressInvalidation);
+  window.addEventListener('error', suppressInvalidation);
+}
+
+function isExtensionInvalidatedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Extension context invalidated') ||
+    message.includes('context invalidated');
+}
+
+function invalidateExtensionContext() {
+  if (!extensionContextValid) return;
+  extensionContextValid = false;
+  backgroundPatchObserver?.disconnect();
+  backgroundPatchObserver = null;
+  if (restoredRenderTimer) {
+    clearTimeout(restoredRenderTimer);
+    restoredRenderTimer = null;
+  }
+}
+
+async function sendRuntimeMessage<T>(message: unknown): Promise<T | undefined> {
+  if (!hasLiveExtensionContext()) return undefined;
+
+  try {
+    return await chrome.runtime.sendMessage(message) as T;
+  } catch (error) {
+    if (isExtensionInvalidatedError(error)) {
+      invalidateExtensionContext();
+      return undefined;
+    }
+    return undefined;
+  }
+}
+
+async function getLocalStorageValue<T>(key: string): Promise<T | undefined> {
+  const storage = getLocalStorageArea();
+  if (!storage) return undefined;
+
+  try {
+    const stored = await storage.get(key);
+    return stored?.[key] as T | undefined;
+  } catch (error) {
+    if (isExtensionInvalidatedError(error)) {
+      invalidateExtensionContext();
+    }
+    return undefined;
+  }
+}
+
+async function setLocalStorageValue(key: string, value: unknown): Promise<void> {
+  const storage = getLocalStorageArea();
+  if (!storage) return;
+
+  try {
+    await storage.set({ [key]: value });
+  } catch (error) {
+    if (isExtensionInvalidatedError(error)) {
+      invalidateExtensionContext();
+    }
+  }
+}
+
+function getLocalStorageArea(): chrome.storage.LocalStorageArea | null {
+  if (!hasLiveExtensionContext()) return null;
+
+  try {
+    const storage = chrome.storage?.local;
+    if (!storage || typeof storage.get !== 'function' || typeof storage.set !== 'function') return null;
+    return storage;
+  } catch (error) {
+    if (isExtensionInvalidatedError(error)) {
+      invalidateExtensionContext();
+    }
+    return null;
+  }
+}
+
+function addRuntimeMessageListener(
+  listener: Parameters<typeof chrome.runtime.onMessage.addListener>[0],
+) {
+  if (!hasLiveExtensionContext()) return;
+
+  try {
+    chrome.runtime.onMessage.addListener(listener);
+  } catch (error) {
+    if (isExtensionInvalidatedError(error)) {
+      invalidateExtensionContext();
+    }
+  }
+}
 
 function forwardAutomationRunToMainWorld(request: AutomationRunnerRequest): Promise<AutomationRunnerResult> {
   return new Promise((resolve) => {
@@ -182,7 +324,7 @@ function runToolExecution(call: ToolCall): Promise<ToolCardResult> {
       detail: err instanceof Error ? err.message : String(err),
     }))
     .then((result) => {
-      toolExecutions.push({ name: call.name, result });
+      toolExecutions.push({ name: call.name, result, provider: call.provider, descriptorId: call.descriptorId });
       renderToolBlock();
       return result;
     });
@@ -200,7 +342,135 @@ async function waitForPendingToolExecutions() {
   }
 }
 
-function syncToMainWorld(memories: Memory[], skills: Skill[], activePreset: SystemPromptPreset | null, modelType: ModelType) {
+function normalizeResponseCompletePayload(payload: unknown, fallbackText: unknown): ResponseCompletePayload {
+  const value = payload && typeof payload === 'object' ? payload as Partial<ResponseCompletePayload> : {};
+  return {
+    text: typeof value.text === 'string' ? value.text : typeof fallbackText === 'string' ? fallbackText : '',
+    chatSessionId: typeof value.chatSessionId === 'string' ? value.chatSessionId : null,
+    parentMessageId: typeof value.parentMessageId === 'number' ? value.parentMessageId : null,
+    assistantMessageId: typeof value.assistantMessageId === 'number' ? value.assistantMessageId : null,
+    promptOptions: {
+      modelType: typeof value.promptOptions?.modelType === 'string' ? value.promptOptions.modelType : null,
+      searchEnabled: value.promptOptions?.searchEnabled === true,
+      thinkingEnabled: value.promptOptions?.thinkingEnabled === true,
+      refFileIds: Array.isArray(value.promptOptions?.refFileIds)
+        ? value.promptOptions.refFileIds.filter((item): item is string => typeof item === 'string')
+        : [],
+    },
+  };
+}
+
+async function continueManualChatWithToolResults(
+  complete: ResponseCompletePayload,
+  executions: ToolExecutionRecord[],
+) {
+  const mcpExecutions = executions.filter((execution) => execution.provider?.kind === 'mcp');
+  if (mcpExecutions.length === 0) {
+    if (complete.chatSessionId) manualContinuationDepth.delete(complete.chatSessionId);
+    return;
+  }
+  if (!complete.chatSessionId || complete.assistantMessageId == null) return;
+
+  const depth = manualContinuationDepth.get(complete.chatSessionId) ?? 0;
+  if (depth >= MANUAL_TOOL_CONTINUATION_LIMIT) return;
+  manualContinuationDepth.set(complete.chatSessionId, depth + 1);
+
+  await requestManualToolContinuation({
+    runId: crypto.randomUUID(),
+    automationId: 'manual-chat-tool-continuation',
+    prompt: buildToolContinuationPrompt(mcpExecutions),
+    trigger: 'manual',
+    chatSessionId: complete.chatSessionId,
+    parentMessageId: complete.assistantMessageId,
+    promptOptions: complete.promptOptions,
+    promptContext: {
+      memories: [],
+      presetContent: null,
+      toolDescriptors: [],
+    },
+    requestedAt: Date.now(),
+  });
+}
+
+function requestManualToolContinuation(request: AutomationRunnerRequest): Promise<AutomationRunnerResult> {
+  return new Promise((resolve) => {
+    const id = request.runId;
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', handleResult);
+      resolve(
+        createAutomationRunnerFailure(
+          request,
+          'manual_tool_continuation_timeout',
+          'Timed out waiting for manual tool continuation.',
+          'bridge',
+          false,
+        ),
+      );
+    }, AUTOMATION_BRIDGE_TIMEOUT_MS);
+
+    const handleResult = (event: MessageEvent) => {
+      if (event.data?.source !== 'deepseek-pp-main') return;
+      if (event.data.type !== 'MANUAL_TOOL_CONTINUATION_RESULT' || event.data.id !== id) return;
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', handleResult);
+      resolve(event.data.result);
+    };
+
+    window.addEventListener('message', handleResult);
+    window.postMessage({
+      source: 'deepseek-pp-content',
+      type: 'CONTINUE_WITH_TOOL_RESULTS',
+      id,
+      payload: request,
+    });
+  });
+}
+
+function buildToolContinuationPrompt(executions: ToolExecutionRecord[]): string {
+  const results = executions.map((execution) => ({
+    tool: execution.name,
+    provider: execution.provider?.displayName,
+    ok: execution.result.ok,
+    summary: execution.result.summary,
+    detail: clampText(execution.result.detail, 4000),
+    output: clampText(
+      execution.result.output === undefined ? undefined : JSON.stringify(execution.result.output),
+      8000,
+    ),
+    truncated: execution.result.truncated === true,
+  }));
+
+  return [
+    '以下是刚才自动执行的 MCP 工具结果。请基于这些结果继续回答用户。',
+    '这是最终回答续写轮次：不要再调用任何工具，不要输出任何 XML 工具标签，不要保存或更新记忆。',
+    '如果结果已经足够，请直接给出最终回答；如果结果不足，请说明缺少什么信息。',
+    '',
+    '<tool_results>',
+    JSON.stringify(results, null, 2),
+    '</tool_results>',
+  ].join('\n');
+}
+
+function clampText(value: string | undefined, maxLength: number): string | undefined {
+  if (!value) return value;
+  return value.length > maxLength ? value.slice(0, maxLength) + '\n...[truncated]' : value;
+}
+
+function syncToMainWorld(
+  memories: Memory[],
+  skills: Skill[],
+  activePreset: SystemPromptPreset | null,
+  modelType: ModelType,
+  toolDescriptors: ToolDescriptor[],
+) {
+  currentMemories = memories;
+  currentSkills = skills;
+  currentActivePreset = activePreset;
+  currentModelType = modelType;
+  currentToolDescriptors = toolDescriptors;
+  toolOpenTagRe = buildToolOpenTagRegex(toolDescriptors);
+  toolMarkerRe = buildToolMarkerRegex(toolDescriptors);
+
   window.postMessage({
     source: 'deepseek-pp-content',
     type: 'SYNC_STATE',
@@ -208,11 +478,36 @@ function syncToMainWorld(memories: Memory[], skills: Skill[], activePreset: Syst
     skills,
     activePreset,
     modelType,
+    toolDescriptors,
   });
 }
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeToolDescriptors(value: unknown): ToolDescriptor[] {
+  if (!Array.isArray(value)) return [...DEFAULT_TOOL_DESCRIPTORS];
+  const descriptors = value.filter((item): item is ToolDescriptor => Boolean(item && typeof item === 'object'));
+  return descriptors.length > 0 ? descriptors : [...DEFAULT_TOOL_DESCRIPTORS];
+}
+
+function buildToolOpenTagRegex(descriptors: ToolDescriptor[]): RegExp {
+  const pattern = buildToolTagPattern(descriptors);
+  return new RegExp(`<\\s*(${pattern})\\s*>`, 'i');
+}
+
+function buildToolMarkerRegex(descriptors: ToolDescriptor[]): RegExp {
+  const pattern = buildToolTagPattern(descriptors);
+  return new RegExp(`<\\s*/?\\s*(?:${pattern})\\s*>`, 'i');
+}
+
+function buildToolTagPattern(descriptors: ToolDescriptor[]): string {
+  const names = descriptors
+    .map((descriptor) => descriptor.invocationName)
+    .filter(Boolean)
+    .map(escapeRegExp);
+  return names.length > 0 ? names.join('|') : 'memory_save|memory_update|memory_delete';
 }
 
 function hashString(value: string): string {
@@ -232,19 +527,14 @@ function normalizeText(value: string | undefined): string {
 }
 
 async function getPersistedToolBlocks(): Promise<PersistedToolBlock[]> {
-  try {
-    const stored = await chrome.storage.local.get(TOOL_RESTORE_STORAGE_KEY);
-    const blocks = stored?.[TOOL_RESTORE_STORAGE_KEY];
-    return Array.isArray(blocks) ? blocks : [];
-  } catch {
-    return [];
-  }
+  const blocks = await getLocalStorageValue<unknown>(TOOL_RESTORE_STORAGE_KEY);
+  return Array.isArray(blocks) ? blocks : [];
 }
 
 async function persistToolExecutions(executions: ToolExecutionRecord[], fullText?: string) {
   if (executions.length === 0) return;
 
-  const content = fullText ? stripToolCalls(fullText) : '';
+  const content = fullText ? stripToolCalls(fullText, { descriptors: currentToolDescriptors }) : '';
   const url = getToolBlockUrl();
   const id = hashString(`${url}\n${content}\n${JSON.stringify(executions)}`);
   const block: PersistedToolBlock = {
@@ -255,8 +545,18 @@ async function persistToolExecutions(executions: ToolExecutionRecord[], fullText
     content,
     executions: executions.map((execution) => ({
       name: execution.name,
-      result: execution.result,
+      provider: execution.provider,
+      descriptorId: execution.descriptorId,
+      result: {
+        ...execution.result,
+        detail: clampText(execution.result.detail, 4000),
+        output: execution.result.output === undefined ? undefined : clampText(JSON.stringify(execution.result.output), 8000),
+      },
     })),
+    metadata: {
+      toolCount: executions.length,
+      mcpToolCount: executions.filter((execution) => execution.provider?.kind === 'mcp').length,
+    },
   };
 
   const existing = await getPersistedToolBlocks();
@@ -267,7 +567,7 @@ async function persistToolExecutions(executions: ToolExecutionRecord[], fullText
     .filter((item) => Date.now() - item.createdAt < 1000 * 60 * 60 * 24 * 30)
     .slice(-100);
 
-  await chrome.storage.local.set({ [TOOL_RESTORE_STORAGE_KEY]: next });
+  await setLocalStorageValue(TOOL_RESTORE_STORAGE_KEY, next);
 }
 
 async function restorePersistedToolBlocks() {
@@ -306,69 +606,21 @@ function rememberRestoredToolRecords(records: ToolCallRestoreRecord[] | undefine
 }
 
 async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
-  try {
-    if (call.name === 'memory_save') {
-      const payload = call.payload as {
-        type?: string;
-        name?: string;
-        content?: string;
-        tags?: string[];
-      };
-      const saved = await chrome.runtime.sendMessage({
-        type: 'SAVE_MEMORY',
-        payload: {
-          type: payload.type || 'topic',
-          name: payload.name || 'unnamed',
-          content: payload.content || '',
-          description: payload.name || '',
-          tags: payload.tags || [],
-          pinned: false,
-        },
-      });
-      if (!saved?.id) {
-        return { ok: false, summary: '保存失败', detail: '未收到保存确认' };
-      }
-      return { ok: true, summary: '已保存', detail: payload.name || '' };
-    }
-
-    if (call.name === 'memory_update') {
-      const payload = call.payload as {
-        id?: number;
-        type?: string;
-        name?: string;
-        content?: string;
-        tags?: string[];
-      };
-      const id = Number(payload.id);
-      if (!id) return { ok: false, summary: '无效 ID' };
-      const existing = await chrome.runtime.sendMessage({ type: 'GET_MEMORY_BY_ID', payload: { id } });
-      if (!existing) return { ok: false, summary: '未找到记忆', detail: `ID ${id} 不存在` };
-      await chrome.runtime.sendMessage({
-        type: 'UPDATE_MEMORY',
-        payload: {
-          ...existing,
-          type: payload.type || existing.type,
-          name: payload.name || existing.name,
-          content: payload.content || existing.content,
-          description: payload.name || existing.description,
-          tags: payload.tags || existing.tags,
-        },
-      });
-      return { ok: true, summary: '已更新', detail: payload.name || existing.name };
-    }
-
-    if (call.name === 'memory_delete') {
-      const payload = call.payload as { id?: number };
-      const id = Number(payload.id);
-      if (!id) return { ok: false, summary: '无效 ID' };
-      await chrome.runtime.sendMessage({ type: 'DELETE_MEMORY', payload: { id } });
-      return { ok: true, summary: '已删除', detail: `#${id}` };
-    }
-
-    return { ok: true, summary: '已识别' };
-  } catch (err) {
-    return { ok: false, summary: '执行失败', detail: err instanceof Error ? err.message : String(err) };
+  const result = await sendRuntimeMessage<ToolCardResult>({ type: 'EXECUTE_TOOL_CALL', payload: call });
+  if (result && typeof result.ok === 'boolean' && typeof result.summary === 'string') {
+    return {
+      ok: result.ok,
+      summary: result.summary,
+      detail: result.detail,
+      output: result.output,
+      truncated: result.truncated,
+      error: result.error,
+    };
   }
+  if (!extensionContextValid) {
+    return { ok: false, summary: '执行失败', detail: '扩展已重新加载，请刷新当前 DeepSeek 页面后重试。' };
+  }
+  return { ok: false, summary: '执行失败', detail: '后台工具执行返回无效结果' };
 }
 
 // --- Tool execution collapsible block (matches official "已思考" style) ---
@@ -446,6 +698,7 @@ function injectToolBlockStyles() {
     }
     .dpp-tool-block-item-text {
       flex: 1;
+      min-width: 0;
     }
     .dpp-tool-block-item-name {
       font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
@@ -459,10 +712,26 @@ function injectToolBlockStyles() {
     .dpp-tool-block-item-status.error {
       color: #ef4444;
     }
+    .dpp-tool-block-item-detail {
+      margin-top: 4px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: rgba(77, 107, 254, 0.06);
+      color: rgb(79, 84, 91);
+      font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
     @media (prefers-color-scheme: dark) {
       .dpp-tool-block-header { color: rgb(155, 160, 165); }
       .dpp-tool-block-header:hover { color: rgb(200, 205, 210); }
       .dpp-tool-block-item { color: rgb(200, 200, 200); }
+      .dpp-tool-block-item-detail {
+        background: rgba(125, 150, 255, 0.12);
+        color: rgb(210, 213, 218);
+      }
     }
   `;
   document.head.appendChild(style);
@@ -504,16 +773,39 @@ function updateToolBlockContent(block: HTMLElement, executions: ToolExecutionRec
     item.innerHTML = `
       <div class="dpp-tool-block-dot"></div>
       <div class="dpp-tool-block-item-text">
-        <span class="dpp-tool-block-item-name"></span>
-        <span class="dpp-tool-block-item-status ${exec.result.ok ? '' : 'error'}"></span>
+        <div>
+          <span class="dpp-tool-block-item-name"></span>
+          <span class="dpp-tool-block-item-status ${exec.result.ok ? '' : 'error'}"></span>
+        </div>
       </div>
     `;
     const nameEl = item.querySelector('.dpp-tool-block-item-name')!;
     const statusEl = item.querySelector('.dpp-tool-block-item-status')!;
-    nameEl.textContent = exec.name;
-    statusEl.textContent = `${exec.result.summary}${exec.result.detail ? ' · ' + exec.result.detail : ''}`;
+    nameEl.textContent = formatToolExecutionName(exec);
+    statusEl.textContent = exec.result.summary;
+    const detail = formatToolResultDetail(exec.result);
+    if (detail) {
+      const detailEl = document.createElement('div');
+      detailEl.className = 'dpp-tool-block-item-detail';
+      detailEl.textContent = detail;
+      item.querySelector('.dpp-tool-block-item-text')!.appendChild(detailEl);
+    }
     body.appendChild(item);
   }
+}
+
+function formatToolResultDetail(result: ToolCardResult): string {
+  if (result.detail) return result.detail;
+  if (result.output === undefined) return '';
+  return typeof result.output === 'string'
+    ? result.output
+    : JSON.stringify(result.output, null, 2);
+}
+
+function formatToolExecutionName(exec: ToolExecutionRecord): string {
+  return exec.provider?.displayName
+    ? `${exec.provider.displayName} / ${exec.name}`
+    : exec.name;
 }
 
 function renderToolBlock() {
@@ -585,6 +877,8 @@ function getRestoredExecutions(record: ToolCallRestoreRecord): ToolExecutionReco
   if (record.executions?.length) return record.executions;
   return (record.calls ?? []).map((call) => ({
     name: call.name,
+    provider: call.provider,
+    descriptorId: call.descriptorId,
     result: summarizeRestoredToolCall(call),
   }));
 }
@@ -673,7 +967,7 @@ function mutationMayContainToolMarker(mutation: MutationRecord): boolean {
 }
 
 function containsToolMarker(text: string | null | undefined): boolean {
-  return typeof text === 'string' && TOOL_MARKER_RE.test(text);
+  return typeof text === 'string' && toolMarkerRe.test(text);
 }
 
 function cleanRenderedToolCalls() {
@@ -749,7 +1043,7 @@ function stripToolCallTextNodes(root: Element) {
         continue;
       }
 
-      const openMatch = TOOL_OPEN_TAG_RE.exec(original.slice(cursor));
+      const openMatch = toolOpenTagRe.exec(original.slice(cursor));
       if (!openMatch) {
         next += original.slice(cursor);
         break;

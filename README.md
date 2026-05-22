@@ -20,6 +20,21 @@
   <img src="assets/yuansheng.jpg" width="300" alt="记忆管理侧边栏">
 </p>
 
+### MCP 工具系统
+
+- **支持多种 MCP 传输** — 支持 Streamable HTTP、HTTP POST、旧版 SSE、本地 stdio bridge 和 Chrome Native Messaging；浏览器不能直接启动 stdio 进程，因此 stdio 服务器需要通过本地 bridge 或 native host 转接
+- **标准 MCP 生命周期** — 连接时执行 `initialize` / `notifications/initialized`，发现工具走 `tools/list`，调用工具走 `tools/call`
+- **默认自动执行** — 新增 MCP 服务默认 `auto`，可在侧边栏按服务或单个工具禁用；禁用或手动策略的工具不会注入 DeepSeek prompt
+- **权限清晰可见** — HTTP/SSE/bridge 传输会请求对应 origin 的 Chrome host permission，侧边栏可直接授权、测试连接、刷新工具和查看延迟/错误
+- **结果 continuation** — DeepSeek 输出 MCP XML 工具块后，扩展会自动执行工具、隐藏原始 XML、展示折叠结果，并把 `<tool_results>` 发回同一会话继续生成
+- **自动化兼容** — 自动化任务复用同一套 MCP 工具 schema、执行循环和历史记录，最多连续 3 轮工具结果 continuation
+- **本地安全边界** — MCP 配置和密钥保存在 Chrome 本地存储；WebDAV 同步仍只同步记忆、Skill 和预设，不同步 MCP secret
+- **默认限制** — 连接超时 10s，请求超时 60s，发现超时 20s，单次结果上限 64KB，单服务工具上限 128 个，均可在 MCP 服务编辑器中调整
+
+<p align="center">
+  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP 管理侧边栏">
+</p>
+
 ### 记忆系统
 
 - **自动记忆** — AI 在对话中识别到关键信息时，通过 `memory_save` 工具自动保存为长期记忆
@@ -116,6 +131,8 @@ npm run dev    # 启动开发服务器，支持热重载
 npm run build  # 生产构建
 npm run zip    # 打包为 .zip（用于发布）
 npm run compile # TypeScript 类型检查
+npm run smoke:mcp # 本地 MCP 协议/解析 smoke 检查
+npm run verify:mcp:mock # live mock MCP 手动/自动化 continuation 验证
 ```
 
 ## 技术栈
@@ -138,6 +155,9 @@ core/
 ├── skill/                # 技能系统（内置技能、解析器、注册表）
 ├── preset/               # 系统提示词预设（存储、激活管理）
 ├── automation/           # 自动化任务（存储、调度、DeepSeek runner、桥接协议）
+├── mcp/                  # MCP 配置、协议、传输、发现缓存和执行
+├── prompt/               # 共享 prompt 增强与工具 schema 渲染
+├── tool/                 # provider-neutral 工具契约、内置记忆工具和运行时
 └── ui/                   # 技能自动补全弹窗
 
 entrypoints/

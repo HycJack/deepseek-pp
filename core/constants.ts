@@ -1,3 +1,9 @@
+import {
+  DEFAULT_TOOL_DESCRIPTORS,
+  createToolInvocationCatalog,
+  createXmlToolCallRegex,
+} from './tool/invocation';
+
 export const DEEPSEEK_API_URL = 'https://chat.deepseek.com/api/v0/chat/completion';
 
 export const MEMORY_TOKEN_BUDGET = 1500;
@@ -8,10 +14,10 @@ export const MSG_PREFIX = 'DEEPSEEK_PP';
 
 export const DSML = '｜DSML｜';
 
-export const TOOL_NAMES = ['memory_save', 'memory_update', 'memory_delete'] as const;
-export type ToolName = typeof TOOL_NAMES[number];
+export const TOOL_NAMES = DEFAULT_TOOL_DESCRIPTORS.map((tool) => tool.invocationName);
+export type ToolName = string;
 
-const MEMORY_SAVE_SCHEMA = '{"type": "function", "function": {"name": "memory_save", "description": "保存一条新的长期记忆", "parameters": {"type": "object", "properties": {"type": {"type": "string", "enum": ["user", "feedback", "topic", "reference"], "description": "记忆类型：user=身份角色偏好, feedback=行为纠正, topic=讨论要点, reference=外部资源链接"}, "name": {"type": "string", "description": "简短标题"}, "content": {"type": "string", "description": "要保存的内容"}, "tags": {"type": "array", "items": {"type": "string"}, "description": "标签列表"}}, "required": ["type", "name", "content", "tags"]}}}';
+export const MEMORY_SAVE_SCHEMA = '{"type": "function", "function": {"name": "memory_save", "description": "保存一条新的长期记忆", "parameters": {"type": "object", "properties": {"type": {"type": "string", "enum": ["user", "feedback", "topic", "reference"], "description": "记忆类型：user=身份角色偏好, feedback=行为纠正, topic=讨论要点, reference=外部资源链接"}, "name": {"type": "string", "description": "简短标题"}, "content": {"type": "string", "description": "要保存的内容"}, "tags": {"type": "array", "items": {"type": "string"}, "description": "标签列表"}}, "required": ["type", "name", "content", "tags"]}}}';
 
 export const MEMORY_UPDATE_SCHEMA = '{"type": "function", "function": {"name": "memory_update", "description": "更新已有记忆", "parameters": {"type": "object", "properties": {"id": {"type": "integer", "description": "记忆ID"}, "type": {"type": "string", "enum": ["user", "feedback", "topic", "reference"], "description": "记忆类型"}, "name": {"type": "string", "description": "更新后的标题"}, "content": {"type": "string", "description": "更新后的内容"}, "tags": {"type": "array", "items": {"type": "string"}, "description": "标签列表"}}, "required": ["id", "type", "name", "content", "tags"]}}}';
 
@@ -25,21 +31,19 @@ export const SYSTEM_TEMPLATE_CHAT = `## 角色
 
 ## Tools
 
-You have access to a set of tools. To call a tool, output an XML block with the tool name as the tag and a JSON object as the body, exactly like this:
+You have access to a set of tools. To call a tool, output an XML block with the tool name itself as the tag and a JSON object as the body, exactly like this:
 
 <memory_save>
 {"type": "user", "name": "用户职业", "content": "前端开发", "tags": ["前端"]}
 </memory_save>
 
 The JSON body MUST be valid JSON on its own. Do NOT add any other text inside the tags, only JSON. You can place tool calls anywhere in your reply (not only at the end).
+The extension only executes direct tool-name tags. Never use wrapper formats such as <invoke name="tool_name">...</invoke> or <tool_call>...</tool_call>.
+The tag name MUST exactly match one of the available tool names.
 
 ### Available Tools
 
-${MEMORY_SAVE_SCHEMA}
-
-${MEMORY_UPDATE_SCHEMA}
-
-${MEMORY_DELETE_SCHEMA}
+{{tools}}
 
 You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
 
@@ -77,21 +81,19 @@ export const SYSTEM_TEMPLATE_THINKING = `你具有长期记忆能力。已有记
 
 ## Tools
 
-You have access to a set of tools. To call a tool, output an XML block with the tool name as the tag and a JSON object as the body, exactly like this:
+You have access to a set of tools. To call a tool, output an XML block with the tool name itself as the tag and a JSON object as the body, exactly like this:
 
 <memory_save>
 {"type": "user", "name": "用户职业", "content": "前端开发", "tags": ["前端"]}
 </memory_save>
 
 The JSON body MUST be valid JSON on its own. Do NOT add any other text inside the tags, only JSON.
+The extension only executes direct tool-name tags. Never use wrapper formats such as <invoke name="tool_name">...</invoke> or <tool_call>...</tool_call>.
+The tag name MUST exactly match one of the available tool names.
 
 ### Available Tools
 
-${MEMORY_SAVE_SCHEMA}
-
-${MEMORY_UPDATE_SCHEMA}
-
-${MEMORY_DELETE_SCHEMA}
+{{tools}}
 
 You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
 
@@ -118,6 +120,6 @@ export const STOP_WORDS = new Set([
 ]);
 
 // XML-style tool call regex: <tool_name>JSON</tool_name>
-export const TOOL_CALL_REGEX = /<(memory_save|memory_update|memory_delete)>\s*([\s\S]*?)\s*<\/\1>/g;
+export const TOOL_CALL_REGEX = createXmlToolCallRegex(createToolInvocationCatalog(DEFAULT_TOOL_DESCRIPTORS));
 
 export const SKILL_TRIGGER_REGEX = /^\/(\S+)\s*([\s\S]*)$/;

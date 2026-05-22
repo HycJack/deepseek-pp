@@ -8,6 +8,61 @@ import type {
   AutomationStatus,
   AutomationUpdateInput,
 } from './automation/types';
+import type {
+  McpServerCreateInput,
+  McpServerId,
+  McpServerUpdateInput,
+} from './mcp/types';
+import type {
+  ToolCall as GenericToolCall,
+  ToolPayload,
+  ToolProviderIdentity,
+  ToolResult as GenericToolResult,
+} from './tool/types';
+
+export type {
+  McpHeaderValue,
+  McpSecretValue,
+  McpServerConfig,
+  McpServerConfigVersion,
+  McpServerCreateInput,
+  McpServerExecutionDefaults,
+  McpServerId,
+  McpServerResultLimits,
+  McpServerStatus,
+  McpServerStorageState,
+  McpServerTimeouts,
+  McpServerTransportConfig,
+  McpServerUpdateInput,
+  McpServerHealth,
+  McpToolAllowlist,
+  McpToolCacheEntry,
+} from './mcp/types';
+
+export type {
+  JsonPrimitive,
+  JsonValue,
+  ToolCallId,
+  ToolCallHistoryRecord,
+  ToolCallSource,
+  ToolDescriptor,
+  ToolDescriptorExecution,
+  ToolDescriptorId,
+  ToolDescriptorSchema,
+  ToolError,
+  ToolExecutionContext,
+  ToolExecutionMode,
+  ToolExecutionTrigger,
+  ToolPayload,
+  ToolProvider,
+  ToolProviderId,
+  ToolProviderIdentity,
+  ToolProviderKind,
+  ToolRegistrySnapshot,
+  ToolResult,
+  ToolRiskLevel,
+  ToolTransportKind,
+} from './tool/types';
 
 export type MemoryType = 'user' | 'feedback' | 'topic' | 'reference';
 
@@ -68,21 +123,15 @@ export interface SkillInvocation {
   rawInput: string;
 }
 
-export interface ToolCall {
-  name: string;
-  payload: Record<string, unknown>;
-  raw: string;
-}
+export interface ToolCall extends GenericToolCall {}
 
-export interface ToolCardResult {
-  ok: boolean;
-  summary: string;
-  detail?: string;
-}
+export interface ToolCardResult extends Pick<GenericToolResult, 'ok' | 'summary' | 'detail' | 'output' | 'truncated' | 'error'> {}
 
 export interface ToolExecutionRecord {
   name: string;
   result: ToolCardResult;
+  provider?: ToolProviderIdentity;
+  descriptorId?: string;
 }
 
 export interface ToolCallRestoreRecord {
@@ -93,6 +142,7 @@ export interface ToolCallRestoreRecord {
   source?: 'history' | 'storage';
   url?: string;
   createdAt?: number;
+  metadata?: ToolPayload;
 }
 
 export interface SystemPromptPreset {
@@ -146,6 +196,18 @@ export type MessageAction =
   | { type: 'GET_AUTOMATION_RUN'; payload: { id: AutomationRunId } }
   | { type: 'APPEND_AUTOMATION_RUN'; payload: AutomationRun }
   | { type: 'UPDATE_AUTOMATION_RUN'; payload: { id: AutomationRunId; patch: AutomationRunUpdateInput } }
+  | { type: 'GET_MCP_SERVERS' }
+  | { type: 'GET_MCP_SERVER'; payload: { id: McpServerId } }
+  | { type: 'CREATE_MCP_SERVER'; payload: McpServerCreateInput }
+  | { type: 'UPDATE_MCP_SERVER'; payload: { id: McpServerId; patch: McpServerUpdateInput } }
+  | { type: 'DELETE_MCP_SERVER'; payload: { id: McpServerId } }
+  | { type: 'GET_MCP_TOOL_CACHE'; payload: { serverId: McpServerId } }
+  | { type: 'REFRESH_MCP_SERVER_TOOLS'; payload: { serverId: McpServerId } }
+  | { type: 'GET_TOOL_DESCRIPTORS' }
+  | { type: 'REFRESH_TOOL_DESCRIPTORS' }
+  | { type: 'EXECUTE_TOOL_CALL'; payload: ToolCall }
+  | { type: 'GET_TOOL_CALL_HISTORY'; payload?: { limit?: number } }
+  | { type: 'CLEAR_TOOL_CALL_HISTORY' }
   | { type: 'GET_CONFIG' }
   | { type: 'GET_MODEL_TYPE' }
   | { type: 'SET_MODEL_TYPE'; payload: ModelType }

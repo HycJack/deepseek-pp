@@ -1,6 +1,15 @@
-import { installFetchHook, updateHookState } from '../core/interceptor/fetch-hook';
+import { installFetchHook, updateHookState, type ResponseCompletePayload } from '../core/interceptor/fetch-hook';
 import { initSkillPopup } from '../core/ui/skill-popup';
-import type { Memory, ModelType, Skill, SystemPromptPreset, ToolCall, ToolCallRestoreRecord } from '../core/types';
+import type {
+  Memory,
+  ModelType,
+  Skill,
+  SystemPromptPreset,
+  ToolCall,
+  ToolCallRestoreRecord,
+  ToolDescriptor,
+  ToolResult,
+} from '../core/types';
 import {
   AUTOMATION_WINDOW_RUN_RESULT,
   MAIN_WORLD_WINDOW_SOURCE,
@@ -50,11 +59,11 @@ export default defineContentScript({
           records,
         });
       },
-      onResponseComplete(fullText: string) {
+      onResponseComplete(complete: ResponseCompletePayload) {
         window.postMessage({
           source: 'deepseek-pp-main',
           type: 'RESPONSE_COMPLETE',
-          text: fullText,
+          payload: complete,
         });
       },
       onMemoriesUsed(ids: number[]) {
@@ -76,14 +85,19 @@ export default defineContentScript({
 
       switch (event.data.type) {
         case 'SYNC_STATE': {
-          const { memories, skills, activePreset, modelType } = event.data as {
+          const { memories, skills, activePreset, modelType, toolDescriptors } = event.data as {
             memories: Memory[];
             skills: Skill[];
             activePreset: SystemPromptPreset | null;
             modelType: ModelType;
+            toolDescriptors?: ToolDescriptor[];
           };
-          updateHookState({ memories, skills, activePreset, modelType });
+          updateHookState({ memories, skills, activePreset, modelType, ...(toolDescriptors ? { toolDescriptors } : {}) });
           initSkillPopup(skills);
+          break;
+        }
+        case 'CONTINUE_WITH_TOOL_RESULTS': {
+          void handleManualToolContinuation(event.data.id, event.data.payload);
           break;
         }
       }
@@ -110,6 +124,46 @@ async function handleAutomationRunRequest(id: string, request: AutomationRunnerR
   });
 }
 
+async function handleManualToolContinuation(id: string, request: AutomationRunnerRequest) {
+  const result = await runDeepSeekAutomation(request).catch((err): AutomationRunnerResult =>
+    createAutomationRunnerFailure(
+      request,
+      'manual_tool_continuation_failed',
+      err instanceof Error ? err.message : String(err),
+      'runner',
+      true,
+    ),
+  );
+
+  window.postMessage({
+    source: MAIN_WORLD_WINDOW_SOURCE,
+    type: 'MANUAL_TOOL_CONTINUATION_RESULT',
+    id,
+    result,
+  });
+}
+
 async function runAutomationInMainWorld(request: AutomationRunnerRequest): Promise<AutomationRunnerResult> {
-  return runDeepSeekAutomation(request);
+  return runDeepSeekAutomation(request, {
+    executeToolCall: executeToolCallViaContent,
+  });
+}
+
+function executeToolCallViaContent(call: ToolCall): Promise<ToolResult> {
+  return new Promise((resolve) => {
+    const id = Math.random().toString(36).slice(2);
+    const handler = (event: MessageEvent) => {
+      if (event.data?.source !== 'deepseek-pp-content') return;
+      if (event.data.type !== 'TOOL_CALL_RESULT' || event.data.id !== id) return;
+      window.removeEventListener('message', handler);
+      resolve(event.data.result as ToolResult);
+    };
+    window.addEventListener('message', handler);
+    window.postMessage({
+      source: 'deepseek-pp-main',
+      type: 'EXECUTE_TOOL_CALL',
+      data: call,
+      id,
+    });
+  });
 }

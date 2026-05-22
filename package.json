@@ -9,6 +9,8 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
+    "smoke:mcp": "node scripts/mcp-smoke.mjs",
+    "verify:mcp:mock": "node scripts/mcp-live-mock.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

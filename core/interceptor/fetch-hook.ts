@@ -1,12 +1,21 @@
-import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL, TOOL_NAMES } from '../constants';
-import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord } from '../types';
-import { buildAugmentedPrompt } from '../memory/injector';
+import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL } from '../constants';
+import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord, ToolDescriptor } from '../types';
+import { buildPromptAugmentation } from '../prompt';
 import { parseSkillCommand } from '../skill/parser';
+import {
+  DEFAULT_TOOL_DESCRIPTORS,
+  createToolInvocationCatalog,
+  getToolCloseTag,
+  getToolOpenTag,
+  hasXmlToolMarker,
+  type ToolInvocationCatalog,
+} from '../tool';
 import { extractTextFromParsed, parseSSEChunk, parseSSEData } from './sse-parser';
 import { extractToolCalls, stripToolCalls } from './tool-parser';
 
 const API_PATH = new URL(DEEPSEEK_API_URL).pathname;
 const HISTORY_PATH = '/api/v0/chat/history_messages';
+const BYPASS_HOOK_HEADER = 'X-DPP-Bypass-Hook';
 
 let originalFetch: typeof window.fetch;
 
@@ -15,11 +24,12 @@ interface HookState {
   skills: Array<{ name: string; instructions: string; memoryEnabled: boolean }>;
   activePreset: SystemPromptPreset | null;
   modelType: ModelType;
+  toolDescriptors: ToolDescriptor[];
   messageCount: number;
   onToolCall: (call: ToolCall) => void;
   onToolCallExecuted: (call: ToolCall) => Promise<{ ok: boolean; summary: string; detail?: string }>;
   onToolCallsRestored: (records: ToolCallRestoreRecord[]) => void;
-  onResponseComplete: (fullText: string) => void;
+  onResponseComplete: (complete: ResponseCompletePayload) => void;
   onMemoriesUsed: (ids: number[]) => void;
 }
 
@@ -28,6 +38,7 @@ let hookState: HookState = {
   skills: [],
   activePreset: null,
   modelType: null,
+  toolDescriptors: [...DEFAULT_TOOL_DESCRIPTORS],
   messageCount: 0,
   onToolCall: () => {},
   onToolCallExecuted: async () => ({ ok: true, summary: '' }),
@@ -46,6 +57,25 @@ export function installFetchHook() {
   hookIndexedDB();
 }
 
+export interface ResponseCompletePayload {
+  text: string;
+  chatSessionId: string | null;
+  parentMessageId: number | null;
+  assistantMessageId: number | null;
+  promptOptions: {
+    modelType: string | null;
+    searchEnabled: boolean;
+    thinkingEnabled: boolean;
+    refFileIds: string[];
+  };
+}
+
+interface RequestContext {
+  chatSessionId: string | null;
+  parentMessageId: number | null;
+  promptOptions: ResponseCompletePayload['promptOptions'];
+}
+
 function hookFetch() {
   originalFetch = window.fetch;
 
@@ -60,11 +90,16 @@ function hookFetch() {
       return originalFetch.call(this, input, init);
     }
 
+    if (hasBypassHookHeader(init.headers)) {
+      return originalFetch.call(this, input, { ...init, headers: stripBypassHookHeader(init.headers) });
+    }
+
     const modified = modifyRequestBody(init.body as string);
     if (!modified) return originalFetch.call(this, input, init);
 
+    const requestContext = createRequestContext(modified);
     init = { ...init, body: modified };
-    return interceptFetchResponse(originalFetch.call(this, input, init));
+    return interceptFetchResponse(originalFetch.call(this, input, init), requestContext);
   };
 }
 
@@ -85,7 +120,7 @@ function hookXHR() {
       const modified = modifyRequestBody(body);
       if (modified) {
         console.log('[DPP] XHR body modified, setting up interceptor');
-        setupXHRResponseInterceptor(this);
+        setupXHRResponseInterceptor(this, createRequestContext(modified));
         return origSend.call(this, modified);
       }
       console.log('[DPP] XHR body NOT modified — passing through');
@@ -97,8 +132,56 @@ function hookXHR() {
   };
 }
 
+function createRequestContext(bodyStr: string): RequestContext {
+  try {
+    const body = JSON.parse(bodyStr) as Record<string, unknown>;
+    return {
+      chatSessionId: typeof body.chat_session_id === 'string' ? body.chat_session_id : null,
+      parentMessageId: normalizeMessageId(body.parent_message_id),
+      promptOptions: {
+        modelType: typeof body.model_type === 'string' ? body.model_type : null,
+        searchEnabled: body.search_enabled === true,
+        thinkingEnabled: body.thinking_enabled === true,
+        refFileIds: Array.isArray(body.ref_file_ids) ? body.ref_file_ids.filter((item): item is string => typeof item === 'string') : [],
+      },
+    };
+  } catch {
+    return {
+      chatSessionId: null,
+      parentMessageId: null,
+      promptOptions: {
+        modelType: null,
+        searchEnabled: false,
+        thinkingEnabled: false,
+        refFileIds: [],
+      },
+    };
+  }
+}
+
 function isChatCompletionURL(url: string): boolean {
   return url.includes(API_PATH);
+}
+
+function hasBypassHookHeader(headers: HeadersInit | undefined): boolean {
+  if (!headers) return false;
+  return new Headers(headers).has(BYPASS_HOOK_HEADER);
+}
+
+function stripBypassHookHeader(headers: HeadersInit | undefined): HeadersInit | undefined {
+  if (!headers) return headers;
+  const next = new Headers(headers);
+  next.delete(BYPASS_HOOK_HEADER);
+  return next;
+}
+
+function normalizeMessageId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function modifyRequestBody(bodyStr: string): string | null {
@@ -124,9 +207,7 @@ function modifyRequestBody(bodyStr: string): string | null {
     hookState.activePreset &&
     (isFirstMessage || hookState.messageCount % PRESET_REINJECTION_INTERVAL === 0);
 
-  const presetPrefix = shouldInjectPreset
-    ? hookState.activePreset!.content + '\n\n---\n\n'
-    : '';
+  const presetContent = shouldInjectPreset ? hookState.activePreset!.content : null;
 
   if (hookState.modelType) {
     body.model_type = hookState.modelType;
@@ -140,25 +221,38 @@ function modifyRequestBody(bodyStr: string): string | null {
       const anyMemoryEnabled = resolved.memoryEnabled;
 
       if (anyMemoryEnabled) {
-        const { augmented } = buildAugmentedPrompt(prompt, hookState.memories, { thinkingEnabled });
-        prompt = augmented;
-      } else if (hookState.memories.length > 0) {
-        const { augmented } = buildAugmentedPrompt(prompt, hookState.memories, {
+        const { augmented } = buildPromptAugmentation(prompt, {
+          memories: hookState.memories,
           thinkingEnabled,
-          identityOnly: true,
+          presetContent,
+          toolDescriptors: hookState.toolDescriptors,
         });
         prompt = augmented;
+      } else if (hookState.memories.length > 0) {
+        const { augmented } = buildPromptAugmentation(prompt, {
+          memories: hookState.memories,
+          thinkingEnabled,
+          identityOnly: true,
+          presetContent,
+          toolDescriptors: hookState.toolDescriptors,
+        });
+        prompt = augmented;
+      } else if (presetContent) {
+        prompt = `${presetContent}\n\n---\n\n${prompt}`;
       }
 
-      body.prompt = presetPrefix + prompt;
+      body.prompt = prompt;
       return JSON.stringify(body);
     }
   }
 
-  const { augmented, usedMemoryIds } = buildAugmentedPrompt(originalPrompt, hookState.memories, {
+  const { augmented, usedMemoryIds } = buildPromptAugmentation(originalPrompt, {
+    memories: hookState.memories,
     thinkingEnabled,
+    presetContent,
+    toolDescriptors: hookState.toolDescriptors,
   });
-  body.prompt = presetPrefix + augmented;
+  body.prompt = augmented;
 
   if (usedMemoryIds.length > 0) {
     hookState.onMemoriesUsed(usedMemoryIds);
@@ -203,8 +297,12 @@ function resolveSkills(skillName: string, args: string): ResolvedSkills | null {
   };
 }
 
-function notifyNewToolCalls(fullText: string, alreadyNotified: number): number {
-  const calls = extractToolCalls(fullText);
+function notifyNewToolCalls(
+  fullText: string,
+  alreadyNotified: number,
+  descriptors: readonly ToolDescriptor[] = hookState.toolDescriptors,
+): number {
+  const calls = extractToolCalls(fullText, { descriptors });
   for (let i = alreadyNotified; i < calls.length; i++) {
     hookState.onToolCall(calls[i]);
   }
@@ -212,33 +310,6 @@ function notifyNewToolCalls(fullText: string, alreadyNotified: number): number {
 }
 
 // --- SSE stream interception: strip XML tool-call blocks from text events ---
-
-const TOOL_OPEN_TAGS = TOOL_NAMES.map(n => `<${n}>`);
-const TOOL_CLOSE_TAGS: Record<string, string> = Object.fromEntries(TOOL_NAMES.map(n => [n, `</${n}>`]));
-
-function findFirstToolOpen(text: string): { idx: number; tool: string } | null {
-  let best: { idx: number; tool: string } | null = null;
-  for (const tool of TOOL_NAMES) {
-    const open = `<${tool}>`;
-    const idx = text.indexOf(open);
-    if (idx >= 0 && (best === null || idx < best.idx)) {
-      best = { idx, tool };
-    }
-  }
-  return best;
-}
-
-function couldBePartialToolOpen(text: string): boolean {
-  for (const open of TOOL_OPEN_TAGS) {
-    const maxLen = Math.min(text.length, open.length - 1);
-    for (let len = maxLen; len > 0; len--) {
-      if (open.startsWith(text.slice(-len))) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
 
 function isBatchPatch(parsed: any): boolean {
   return parsed?.o === 'BATCH' && Array.isArray(parsed.v);
@@ -281,6 +352,32 @@ function setDirectPatchText(parsed: any, value: string) {
 
 function shouldEmitSanitizedTextPatch(parsed: any): boolean {
   return isBatchPatch(parsed) || isFragmentCreationPatch(parsed);
+}
+
+function collectAssistantMessageId(parsed: unknown, current: number | null): number | null {
+  if (!parsed || typeof parsed !== 'object') return current;
+  const value = parsed as Record<string, unknown>;
+  const direct = normalizeMessageId(value.response_message_id) ?? normalizeMessageId(value.responseMessageId);
+  if (direct !== null) return direct;
+
+  if (typeof value.p === 'string' && value.p.includes('response_message_id')) {
+    const id = normalizeMessageId(value.v);
+    if (id !== null) return id;
+  }
+
+  if (value.o === 'BATCH' && Array.isArray(value.v)) {
+    return value.v.reduce((next, item) => collectAssistantMessageId(item, next), current);
+  }
+
+  if (Array.isArray(value.v)) {
+    return value.v.reduce((next, item) => collectAssistantMessageId(item, next), current);
+  }
+
+  if (value.v && typeof value.v === 'object') {
+    return collectAssistantMessageId(value.v, current);
+  }
+
+  return current;
 }
 
 function cloneParsedWithTextPrefix(parsed: any, keepChars: number): any | null {
@@ -353,12 +450,19 @@ function cloneParsedWithTextSuffix(parsed: any, skipChars: number): any | null {
 }
 
 class XmlToolStreamFilter {
+  private catalog: ToolInvocationCatalog;
+  private toolOpenTags: string[];
   private state: 'NORMAL' | 'SUPPRESSING' = 'NORMAL';
   private currentTool: string | null = null;
   private pendingText = '';
   private pendingBlocks: Array<{ block: string; isFragmentCreation: boolean; parsed: any }> = [];
   private chunkBuffer = '';
   private encoder = new TextEncoder();
+
+  constructor(descriptors: readonly ToolDescriptor[] = DEFAULT_TOOL_DESCRIPTORS) {
+    this.catalog = createToolInvocationCatalog(descriptors);
+    this.toolOpenTags = this.catalog.invocationNames.map(getToolOpenTag);
+  }
 
   processChunk(chunk: string, controller: ReadableStreamDefaultController<Uint8Array>) {
     this.chunkBuffer += chunk;
@@ -410,7 +514,7 @@ class XmlToolStreamFilter {
       if (this.state === 'SUPPRESSING') {
         const previousPendingLength = this.pendingText.length;
         this.pendingText += text;
-        const closeTag = TOOL_CLOSE_TAGS[this.currentTool!];
+        const closeTag = getToolCloseTag(this.currentTool!);
         const closeIdx = this.pendingText.indexOf(closeTag);
         if (closeIdx !== -1) {
           const tailStart = closeIdx + closeTag.length;
@@ -449,10 +553,10 @@ class XmlToolStreamFilter {
     this.pendingText += text;
     this.pendingBlocks.push({ block, isFragmentCreation, parsed });
 
-    const found = findFirstToolOpen(this.pendingText);
+    const found = this.findFirstToolOpen(this.pendingText);
     if (found) {
-      const closeTag = TOOL_CLOSE_TAGS[found.tool];
-      const closeIdx = this.pendingText.indexOf(closeTag, found.idx + `<${found.tool}>`.length);
+      const closeTag = getToolCloseTag(found.tool);
+      const closeIdx = this.pendingText.indexOf(closeTag, found.idx + getToolOpenTag(found.tool).length);
       const tailStart = closeIdx === -1 ? -1 : closeIdx + closeTag.length;
       const tailOffsetInCurrentText = tailStart - previousPendingLength;
 
@@ -476,7 +580,7 @@ class XmlToolStreamFilter {
       return;
     }
 
-    if (couldBePartialToolOpen(this.pendingText)) {
+    if (this.couldBePartialToolOpen(this.pendingText)) {
       return;
     }
 
@@ -528,6 +632,30 @@ class XmlToolStreamFilter {
     controller.enqueue(this.encoder.encode(block + '\n\n'));
   }
 
+  private findFirstToolOpen(text: string): { idx: number; tool: string } | null {
+    let best: { idx: number; tool: string } | null = null;
+    for (const tool of this.catalog.invocationNames) {
+      const open = getToolOpenTag(tool);
+      const idx = text.indexOf(open);
+      if (idx >= 0 && (best === null || idx < best.idx)) {
+        best = { idx, tool };
+      }
+    }
+    return best;
+  }
+
+  private couldBePartialToolOpen(text: string): boolean {
+    for (const open of this.toolOpenTags) {
+      const maxLen = Math.min(text.length, open.length - 1);
+      for (let len = maxLen; len > 0; len--) {
+        if (open.startsWith(text.slice(-len))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private emitBlocksBeforeOpen(controller: ReadableStreamDefaultController<Uint8Array>, idx: number) {
     let charsSeen = 0;
 
@@ -554,16 +682,21 @@ class XmlToolStreamFilter {
   }
 }
 
-async function interceptFetchResponse(responsePromise: Promise<Response>): Promise<Response> {
+async function interceptFetchResponse(
+  responsePromise: Promise<Response>,
+  requestContext: RequestContext,
+): Promise<Response> {
   const response = await responsePromise;
   if (!response.body) return response;
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  const filter = new XmlToolStreamFilter();
+  const toolDescriptors = hookState.toolDescriptors;
+  const filter = new XmlToolStreamFilter(toolDescriptors);
   let fullText = '';
   let notifiedCount = 0;
   let textAccBuffer = '';
+  let assistantMessageId: number | null = null;
 
   const processForFullText = (text: string) => {
     textAccBuffer += text;
@@ -579,8 +712,9 @@ async function interceptFetchResponse(responsePromise: Promise<Response>): Promi
       const eventText = extractTextFromParsed(parsed);
       if (eventText) {
         fullText += eventText;
-        notifiedCount = notifyNewToolCalls(fullText, notifiedCount);
+        notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
       }
+      assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
     }
   };
 
@@ -598,8 +732,9 @@ async function interceptFetchResponse(responsePromise: Promise<Response>): Promi
               const eventText = extractTextFromParsed(parsed);
               if (eventText) {
                 fullText += eventText;
-                notifiedCount = notifyNewToolCalls(fullText, notifiedCount);
+                notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
               }
+              assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
             }
             textAccBuffer = '';
           }
@@ -613,14 +748,20 @@ async function interceptFetchResponse(responsePromise: Promise<Response>): Promi
       }
 
       // Stream ended — execute any detected tool calls
-      const calls = extractToolCalls(fullText);
+      const calls = extractToolCalls(fullText, { descriptors: toolDescriptors });
       if (calls.length > 0) {
         for (const call of calls.slice(notifiedCount)) {
           await hookState.onToolCallExecuted(call);
         }
       }
 
-      hookState.onResponseComplete(fullText);
+      hookState.onResponseComplete({
+        text: fullText,
+        chatSessionId: requestContext.chatSessionId,
+        parentMessageId: requestContext.parentMessageId,
+        assistantMessageId,
+        promptOptions: requestContext.promptOptions,
+      });
       controller.close();
     },
   });
@@ -632,20 +773,28 @@ async function interceptFetchResponse(responsePromise: Promise<Response>): Promi
   });
 }
 
-function setupXHRResponseInterceptor(xhr: XMLHttpRequest) {
+function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: RequestContext) {
   console.log('[DPP] setupXHRResponseInterceptor called');
   let fullText = '';
   let lastLen = 0;
   let notifiedCount = 0;
   let completed = false;
   let filteredResponse = '';
-  const filter = new XmlToolStreamFilter();
+  let assistantMessageId: number | null = null;
+  const toolDescriptors = hookState.toolDescriptors;
+  const filter = new XmlToolStreamFilter(toolDescriptors);
 
   const finalizeIfNeeded = () => {
     if (completed) return;
     completed = true;
-    notifiedCount = notifyNewToolCalls(fullText, notifiedCount);
-    hookState.onResponseComplete(fullText);
+    notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+    hookState.onResponseComplete({
+      text: fullText,
+      chatSessionId: requestContext.chatSessionId,
+      parentMessageId: requestContext.parentMessageId,
+      assistantMessageId,
+      promptOptions: requestContext.promptOptions,
+    });
   };
 
   const origResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText') ||
@@ -672,8 +821,9 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest) {
           const text = extractTextFromParsed(parsed);
           if (text) {
             fullText += text;
-            notifiedCount = notifyNewToolCalls(fullText, notifiedCount);
+            notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
           }
+          assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
         }
         // Filter for frontend
         filter.processChunk(newData, fakeController);
@@ -765,12 +915,8 @@ function setupXHRHistoryInterceptor(xhr: XMLHttpRequest) {
 }
 
 function hasToolCallMarker(text: string): boolean {
-  // Check for any of our tool tags
-  for (const name of TOOL_NAMES) {
-    if (text.includes(`<${name}>`) || text.includes(`</${name}>`)) {
-      return true;
-    }
-  }
+  const catalog = createToolInvocationCatalog(hookState.toolDescriptors);
+  if (hasXmlToolMarker(text, catalog)) return true;
   // Legacy: also detect old DSML markers in historical data
   return text.includes('｜DSML｜');
 }
@@ -790,10 +936,10 @@ function getMessageRestoreKey(msg: any, index: number): string {
 function collectToolCallRestoreRecord(text: string, key: string): ToolCallRestoreRecord | null {
   if (!hasToolCallMarker(text)) return null;
 
-  const calls = extractToolCalls(text);
+  const calls = extractToolCalls(text, { descriptors: hookState.toolDescriptors });
   if (calls.length === 0) return null;
 
-  const content = stripToolCalls(text);
+  const content = stripToolCalls(text, { descriptors: hookState.toolDescriptors });
   const id = hashString(`${key}\n${content}\n${calls.map((call) => call.raw).join('\n')}`);
   return {
     id,
@@ -816,14 +962,14 @@ function stripToolCallsFromHistory(json: any) {
     if (typeof msg.content === 'string' && hasToolCallMarker(msg.content)) {
       const record = collectToolCallRestoreRecord(msg.content, `${messageKey}:content`);
       if (record) restoredRecords.push(record);
-      msg.content = stripToolCalls(msg.content);
+      msg.content = stripToolCalls(msg.content, { descriptors: hookState.toolDescriptors });
     }
     if (msg.fragments && Array.isArray(msg.fragments)) {
       msg.fragments.forEach((frag: any, fragIndex: number) => {
         if (typeof frag.content === 'string' && hasToolCallMarker(frag.content)) {
           const record = collectToolCallRestoreRecord(frag.content, `${messageKey}:fragment:${fragIndex}`);
           if (record) restoredRecords.push(record);
-          frag.content = stripToolCalls(frag.content);
+          frag.content = stripToolCalls(frag.content, { descriptors: hookState.toolDescriptors });
         }
       });
     }
@@ -902,14 +1048,14 @@ function stripSingleIDBRecord(record: any, restoredRecords: ToolCallRestoreRecor
     if (typeof msg.content === 'string' && hasToolCallMarker(msg.content)) {
       const record = collectToolCallRestoreRecord(msg.content, `${messageKey}:content`);
       if (record) restoredRecords.push(record);
-      msg.content = stripToolCalls(msg.content);
+      msg.content = stripToolCalls(msg.content, { descriptors: hookState.toolDescriptors });
     }
     if (msg.fragments && Array.isArray(msg.fragments)) {
       msg.fragments.forEach((frag: any, fragIndex: number) => {
         if (typeof frag.content === 'string' && hasToolCallMarker(frag.content)) {
           const record = collectToolCallRestoreRecord(frag.content, `${messageKey}:fragment:${fragIndex}`);
           if (record) restoredRecords.push(record);
-          frag.content = stripToolCalls(frag.content);
+          frag.content = stripToolCalls(frag.content, { descriptors: hookState.toolDescriptors });
         }
       });
     }

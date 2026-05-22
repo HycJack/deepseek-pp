@@ -1,81 +1,91 @@
 ## Project Overview
 
-### Preliminary Direction
+## Preliminary Direction
 
-Implement Codex-style DeepSeek automations in DeepSeek++: users can click to start an automation in a new DeepSeek chat session, then attach a cron/RRULE-like frequency so future runs continue in that automation session.
+Add MCP capability to DeepSeek++ so the Chrome extension can configure MCP servers, discover available tools, inject those tool schemas into DeepSeek prompts, execute model-requested MCP calls, and reuse the same capability from manual chats and automations.
 
-### Current Architecture
+## Current Architecture
 
 ```mermaid
 flowchart LR
-  User["User in DeepSeek web"] --> Page["chat.deepseek.com UI"]
-  Page --> MainWorld["entrypoints/main-world.content.ts"]
-  MainWorld --> Hook["core/interceptor/fetch-hook.ts"]
-  Hook --> DS["DeepSeek web endpoints"]
-  Hook --> Content["entrypoints/content.ts"]
-  Content --> Background["entrypoints/background.ts"]
-  Sidepanel["entrypoints/sidepanel React UI"] --> Background
-  Background --> Storage["Dexie + chrome.storage.local"]
-  Background --> Tabs["DeepSeek tabs"]
+  UI["Sidepanel React UI"] --> BG["Background service worker"]
+  BG --> Stores["Chrome Storage / Dexie stores"]
+  BG --> CS["Content script"]
+  CS <--> MW["Main-world script"]
+  MW --> DS["DeepSeek web APIs"]
+  MW --> Hook["fetch/XHR hook"]
+  Hook --> Prompt["Prompt augmentation"]
+  Hook --> SSE["SSE parsing and tool-call filtering"]
+  CS --> DOM["DeepSeek DOM tool result block"]
 ```
 
-The extension is a WXT Chrome MV3 extension. It currently augments user-initiated DeepSeek requests from the page main world, then routes local tool execution through content script and background script. The side panel manages memories, skills, presets, settings, WebDAV sync, model mode, and background image settings.
+DeepSeek++ is a WXT Chrome MV3 extension. The current architecture has three runtime layers:
 
-For automations, the safest architecture is to keep scheduling in the background service worker but execute DeepSeek messages from a DeepSeek page main-world runner. This preserves the existing logged-in web session and DeepSeek web challenge/proof-of-work behavior.
+- `entrypoints/background.ts`: extension service worker, message router, persistence coordinator, WebDAV sync handler, automation scheduler, and DeepSeek tab orchestration.
+- `entrypoints/content.ts`: DeepSeek page content script, DOM integration, tool-call execution for built-in memory tools, result rendering, restoration, background image handling, and automation bridge.
+- `entrypoints/main-world.content.ts`: main-world script that installs the network hook, mutates DeepSeek requests, parses streaming responses, and executes automation requests in page context.
 
-### Technology Stack
+The existing tool-call model is XML-over-prompt:
 
-| Layer | Current | Target for automation |
+```text
+Prompt injection -> DeepSeek streams XML tool tags -> main-world detects tags
+-> content script executes tool action -> result block is rendered into DeepSeek UI
+```
+
+This is a good base for MCP, but current tool definitions are hardcoded around `memory_save`, `memory_update`, and `memory_delete`.
+
+## Technology Stack
+
+| Layer | Current | Target for MCP |
 |:--|:--|:--|
 | Language | TypeScript | TypeScript |
-| Framework | WXT Chrome MV3 | WXT Chrome MV3 |
-| UI | React 19 + Tailwind CSS 4 | Side panel automation page/components |
-| Storage | Dexie + chrome.storage.local | New automation store, run state, run history |
-| DeepSeek integration | Page fetch/XHR interception | Page main-world runner using `/api/v0/chat/completion` and `/api/v0/chat/history_messages` |
-| Scheduler | None | `chrome.alarms` plus due-task scanner |
-| Build | `npm run compile`, `npm run build` | Same |
+| Extension framework | WXT / Chrome MV3 | WXT / Chrome MV3 |
+| UI | React 19 + Tailwind CSS 4 | Add MCP configuration page or tab |
+| Persistence | Dexie for memories, Chrome Storage for most config | Chrome Storage for MCP server config; optional Dexie only if large logs are needed |
+| Runtime bridges | `chrome.runtime`, `chrome.tabs`, `window.postMessage` | Reuse existing bridge with typed MCP messages |
+| Tool protocol | Custom XML tags with JSON body | MCP tool schemas adapted into the same XML tag protocol |
+| Build | `npm run compile`, `npm run build`, `npm run zip` | Same |
 
-### Entry Points
+## Entry Points
 
-| Entry point | Responsibility |
-|:--|:--|
-| `entrypoints/background.ts` | Central message router, persistence orchestration, broadcasts to DeepSeek tabs and side panel |
-| `entrypoints/content.ts` | Isolated content script, DOM integration, tool execution, local result rendering |
-| `entrypoints/main-world.content.ts` | Main-world script, installs fetch/XHR hooks and syncs runtime state into page context |
-| `core/interceptor/fetch-hook.ts` | DeepSeek request augmentation, SSE parsing, tool-call filtering, history cleanup |
-| `entrypoints/sidepanel/App.tsx` | Side panel tab shell |
-| `entrypoints/sidepanel/pages/SettingsPage.tsx` | Current largest settings surface; candidate reference for compact admin UI patterns |
-| `wxt.config.ts` | Manifest permissions and host permissions |
+- `entrypoints/background.ts`: best place for MCP server registry, connection lifecycle, permission checks, and request execution.
+- `entrypoints/content.ts`: best place to route model-requested tool calls to background and render MCP execution results.
+- `entrypoints/main-world.content.ts`: best place to receive tool schema state and keep prompt/SSE interception isolated from Chrome APIs.
+- `core/interceptor/fetch-hook.ts`: current prompt augmentation and stream filtering; needs to become data-driven rather than relying on fixed `TOOL_NAMES`.
+- `core/constants.ts`: currently owns hardcoded tool names, regex, and schemas; MCP should move dynamic tool metadata out of this file.
+- `entrypoints/sidepanel/App.tsx`: tab shell where an MCP page can be added.
+- `entrypoints/sidepanel/pages/SettingsPage.tsx`: existing settings pattern; MCP can either be a dedicated tab or a settings section.
+- `core/automation/runner.ts`: automation path sends prompt directly through DeepSeek APIs; it currently does not run through the fetch-hook prompt injector in the same way as a user-typed chat, so MCP support for automations needs explicit design.
 
-### Build & Run
+## Build & Run
 
 ```bash
+npm install
 npm run compile
 npm run build
 npm run dev
+npm run zip
 ```
 
-Current `npm run compile` passes before automation changes.
+There is no dedicated unit test runner in `package.json`; verification currently depends on TypeScript compile, WXT build, and browser/manual extension checks.
 
-### External Integrations
+## External Integrations
 
-| Integration | Current use | Automation relevance |
-|:--|:--|:--|
-| DeepSeek web completion | Existing hook path: `/api/v0/chat/completion` | Primary execution endpoint |
-| DeepSeek history | Existing hook path: `/api/v0/chat/history_messages` | Needed to restore message tree and latest parent message |
-| DeepSeek web challenge / PoW | Present in current frontend bundle before completion calls | Direct background fetch is risky; page runner should reuse page context |
-| Chrome storage | Existing skill/preset/model/background/sync config stores | Store automations, sessions, run records |
-| Dexie | Existing memory DB | Candidate for larger run history; chrome storage is enough for task definitions |
-| Chrome tabs | Existing broadcast to `*://chat.deepseek.com/*` | Find/open execution tab for automation runner |
-| Chrome alarms | Not currently used | Required for scheduled runs |
-| WebDAV | Existing optional sync | Out of scope for MVP unless automation sync is explicitly desired |
+- DeepSeek web APIs:
+  - `/api/v0/chat/completion`
+  - `/api/v0/chat/history_messages`
+  - `/api/v0/chat/create_pow_challenge`
+  - `/api/v0/chat_session/create`
+- Chrome extension APIs:
+  - `sidePanel`, `storage`, `alarms`, `tabs`, `permissions`
+- WebDAV sync:
+  - user-configured remote storage for memories, skills, and presets
+- Future MCP:
+  - browser extension cannot spawn arbitrary local MCP stdio processes by itself
+  - practical browser-compatible first targets are HTTP/SSE/Streamable HTTP MCP endpoints, or a companion local bridge exposed over HTTP/WebSocket/native messaging
 
-### Live Validation Notes
+## Detected Tracking Mode
 
-Chrome validation on 2026-05-21 verified the desired session behavior in the installed extension environment:
+`GITHUB_STANDARD`
 
-- A new DeepSeek chat session was created by sending a test prompt from the homepage.
-- Test session URL: `https://chat.deepseek.com/a/chat/s/5776548f-9cf4-4dd1-8874-9f2bb2c156e2`.
-- A second prompt sent from that URL appended to the same conversation.
-- Page reload restored both rounds from history, confirming the history chain is persisted.
-- The current Chrome automation sandbox cannot directly call page `fetch/XMLHttpRequest`; implementation should be inside the extension's main-world script, not through external browser automation tooling.
+The GitHub CLI is available, authenticated, and can access Issues. Project board support is not available because the token lacks `project` scope.

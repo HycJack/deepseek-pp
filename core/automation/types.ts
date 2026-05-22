@@ -1,3 +1,5 @@
+import type { Memory, ToolDescriptor, ToolExecutionRecord } from '../types';
+
 export type AutomationId = string;
 export type AutomationRunId = string;
 
@@ -94,7 +96,14 @@ export interface AutomationRunnerRequest {
   chatSessionId: string | null;
   parentMessageId: number | null;
   promptOptions: AutomationPromptOptions;
+  promptContext?: AutomationPromptContext;
   requestedAt: number;
+}
+
+export interface AutomationPromptContext {
+  memories?: Memory[];
+  presetContent?: string | null;
+  toolDescriptors?: ToolDescriptor[];
 }
 
 export interface AutomationHistorySnapshot {
@@ -112,6 +121,7 @@ export interface AutomationRunnerSuccess {
   parentMessageId: number;
   assistantMessageId: number | null;
   assistantText: string;
+  toolExecutions?: ToolExecutionRecord[];
   history: AutomationHistorySnapshot | null;
   completedAt: number;
 }

@@ -1,102 +1,90 @@
 ## Risk Assessment
 
-### S.U.P.E.R Architecture Health Summary
+## S.U.P.E.R Architecture Health Summary
 
 | Principle | Status | Key Findings | Transformation Priority |
 |:--|:--|:--|:--|
-| **S** Single Purpose | Yellow/Red | `fetch-hook.ts` and `content.ts` already combine multiple responsibilities. Automation could make them harder to reason about if added inline. | High |
-| **U** Unidirectional Flow | Yellow | Current flow is mostly directional, but page hook, content script, and background have bidirectional window/runtime messaging. | Medium |
-| **P** Ports over Implementation | Yellow | TypeScript interfaces exist, but message protocols and DeepSeek SSE/history payloads are not formalized as contracts. | High |
-| **E** Environment-Agnostic | Red | DeepSeek web integration depends on current page internals, endpoint paths, challenge headers, DOM shape, and Chrome MV3 APIs. | High |
-| **R** Replaceable Parts | Yellow/Red | Interceptor and content script are high replacement-cost hotspots. Scheduler can be replaceable if isolated. | High |
+| S Single Purpose | 🔴 | `content.ts`, `fetch-hook.ts`, `SettingsPage.tsx`, and `constants.ts` already carry multiple responsibilities. MCP will increase this if added inline. | High |
+| U Unidirectional Flow | 🟡 | Runtime flow is mostly sound: sidepanel/content -> background -> stores/tabs, content <-> main-world. The weak point is prompt augmentation depending directly on memory/skill internals. | Medium |
+| P Ports over Implementation | 🔴 | Existing tool schemas are JSON strings, parser regex is hardcoded, and tool payload validation is ad hoc. MCP needs explicit provider/tool/call/result contracts. | High |
+| E Environment-Agnostic | 🟡 | Chrome and DeepSeek page coupling are expected, but endpoint URLs, DOM selectors, and MCP transport assumptions must be isolated. Browser extension cannot directly spawn stdio MCP servers. | High |
+| R Replaceable Parts | 🔴 | Adding or replacing tool providers currently touches constants, prompt templates, parser/filtering, content executor, and UI. | High |
 
-**Overall Health**: 0/5 principles fully healthy for this transformation; refactoring needed before or during implementation.
+Overall health: 2/5 principles healthy enough for incremental work. The codebase is workable, but MCP should begin with architectural refactoring around tools before adding UI breadth.
 
-### S.U.P.E.R Violation Hotspots
+## S.U.P.E.R Violation Hotspots
 
-1. `core/interceptor/fetch-hook.ts`
-   - Critical because it owns completion request mutation, SSE filtering, XHR interception, history cleanup, and IndexedDB cleanup.
-   - Automation must not add scheduling/session-store concerns here.
+| Hotspot | Severity | Why It Matters For MCP |
+|:--|:--|:--|
+| `core/constants.ts` | High | Built-in memory schemas and tool regex are hardcoded as strings; dynamic MCP tools cannot fit cleanly. |
+| `core/interceptor/fetch-hook.ts` | High | Prompt injection and SSE filtering rely on fixed tool names; MCP needs runtime tool descriptors. |
+| `entrypoints/content.ts` | High | `executeToolCall` currently handles memory tools inline; adding MCP here would create an unmaintainable executor. |
+| `entrypoints/background.ts` | Medium | Already a large router. MCP should be delegated to `core/mcp/*` and surfaced through narrow message actions. |
+| `entrypoints/sidepanel/pages/SettingsPage.tsx` | Medium | Too large for full MCP management. A separate MCP page is cleaner. |
+| `core/automation/runner.ts` | Medium | Automations bypass the normal UI request path and need explicit MCP prompt/tool execution design. |
 
-2. `entrypoints/content.ts`
-   - High because it owns local tool execution, rendering, restore, storage, and bridge messages.
-   - Automation should add a narrow bridge only, with execution logic elsewhere.
-
-3. `entrypoints/background.ts`
-   - Medium/high because the message switch is centralized and will grow.
-   - Automation CRUD/scheduling should delegate to `core/automation/*`.
-
-4. `core/types.ts`
-   - Medium because adding all automation contracts here could make the global type surface unwieldy.
-   - Prefer grouped automation interfaces and narrow message action additions.
-
-### Risk Matrix
+## Risk Matrix
 
 | Risk | Impact | Likelihood | Severity | Mitigation |
 |:--|:--|:--|:--|:--|
-| DeepSeek web challenge / proof-of-work blocks direct background fetch | Automations fail silently or get rejected | High | High | Execute completion from main-world DeepSeek page runner; do not rely on background-only fetch for MVP |
-| `parent_message_id` extraction is incomplete | Scheduled runs may fork, fail, or lose context | High | High | Persist latest assistant/user message IDs from SSE and verify against `history_messages` after each run |
-| MV3 service worker sleep delays alarms | Runs may be late | High | Medium | Use `chrome.alarms` as wake signal, scan due tasks on startup/alarm, track `nextRunAt` and missed-run policy |
-| User not logged in / no DeepSeek tab available | Scheduled run cannot start | Medium | High | Open or focus `chat.deepseek.com`, detect login/input availability, mark run failed with clear reason |
-| DOM or DeepSeek frontend changes | Runner breaks | Medium | High | Favor API runner in main world over DOM typing; keep DOM fallback/testing isolated |
-| Too many/high-frequency automations | Rate limiting, browser load, account risk | Medium | Medium | Enforce minimum interval and serial per-automation run lock |
-| Existing hooks intercept automation prompt unexpectedly | Prompt double-injected or transformed unexpectedly | Medium | Medium | Decide whether automation uses normal hook augmentation; tag automation requests if bypass is needed |
-| Large run history in chrome storage | Storage quota pressure | Medium | Medium | Store compact summaries in chrome storage, optionally larger logs in Dexie |
-| Side panel UX crowding | Hard to manage tasks | Medium | Low | Add dedicated Automation tab/page |
+| Browser extension cannot run local stdio MCP servers directly | Feature may be misunderstood or impossible for local-only MCP | High | High | Define first supported transports as HTTP/SSE/Streamable HTTP, or require a companion bridge/native messaging later. |
+| Dynamic tool schemas break XML stripping/filtering | Raw tool blocks may leak into DeepSeek UI/history | Medium | High | Replace hardcoded regex with descriptor-driven parser/filter tests before adding MCP execution. |
+| MCP calls expose private data or arbitrary network access | Security and trust risk | Medium | High | Add per-server enablement, per-tool allowlist, confirmation policy for risky tools, and result size limits. |
+| Automation runs cannot execute MCP tools consistently | Scheduled tasks produce tool XML but no execution loop | Medium | High | Design shared tool execution path for both live chat and automation; do not assume fetch-hook alone is enough. |
+| Long MCP tool results exceed prompt or UI budget | Chat becomes noisy or breaks response rendering | Medium | Medium | Add result summarization, truncation, and structured display metadata. |
+| MV3 service worker lifetime interrupts MCP calls | Tool calls fail during suspended background worker or long-running requests | Medium | Medium | Keep calls bounded, persist call state, and surface timeout/retry status in result cards. |
+| Permission prompts become confusing | Users may grant broad host permissions without context | Medium | Medium | Request origins per MCP server URL and show connection state in sidepanel. |
 
-### High-Severity Risks
+## High-Severity Risks
 
-#### Direct completion calls may fail outside page context
+### MCP Transport Reality
 
-The DeepSeek frontend bundle calls `/api/v0/chat/create_pow_challenge` and attaches challenge response headers before completion-like requests. A background-only `fetch('/api/v0/chat/completion')` implementation is likely brittle because it must reproduce session cookies, CSRF-like headers, challenge solving, SSE handling, and future frontend changes. The MVP should run inside `entrypoints/main-world.content.ts`, where the page already has the right context and the existing extension already hooks completion traffic.
+The browser extension can call HTTP endpoints after host permission is granted, but it cannot spawn arbitrary local stdio MCP servers the way a desktop agent can. Supporting local MCP servers requires one of:
 
-#### Continuous session state depends on parent message IDs
+- a local HTTP/WebSocket MCP bridge started outside the extension
+- Chrome native messaging host
+- a remote MCP endpoint over HTTP/SSE/Streamable HTTP
 
-Completion requests use:
+The first implementation should explicitly support browser-compatible transports and avoid claiming generic stdio MCP support.
 
-```json
-{
-  "chat_session_id": "...",
-  "parent_message_id": null,
-  "model_type": "...",
-  "prompt": "...",
-  "ref_file_ids": [],
-  "thinking_enabled": false,
-  "search_enabled": false,
-  "action": null,
-  "preempt": false
-}
+### Tool Contract Refactor
+
+Current tool infrastructure is memory-specific:
+
+- `TOOL_NAMES` is fixed to memory tool names
+- `TOOL_CALL_REGEX` only matches those names
+- prompt templates embed hardcoded memory schemas
+- `executeToolCall` branches on memory names
+
+MCP requires a provider-neutral contract:
+
+```text
+ToolProvider -> ToolDescriptor[] -> Prompt schema renderer -> XML parser/filter
+ToolCall -> ToolExecutor -> ToolResult -> UI result block
 ```
 
-For the first run in a new automation session, `parent_message_id` is null. For subsequent runs, the extension must persist the latest valid parent message ID after the assistant response completes. This should be confirmed from SSE payloads and reconciled with `/api/v0/chat/history_messages`.
+### Automation Compatibility
 
-#### Scheduler timing is best-effort
+Manual chats use fetch/XHR interception. Automations call DeepSeek APIs from `core/automation/runner.ts` inside main-world. They may not automatically inherit the same dynamic MCP schema and execution loop unless the prompt augmentation and tool execution abstractions are shared.
 
-Chrome MV3 alarms are suitable for browser automation but not equivalent to a server cron daemon. The design should record intended run time, actual start/end time, and status, and should explicitly handle missed windows after browser sleep or restart.
+## Technical Debt
 
-### Technical Debt
+- No dedicated test runner, despite several pure modules that should be testable.
+- Runtime message payloads are TypeScript typed but not validated at the boundary.
+- Large files exceed comfortable change size:
+  - `entrypoints/content.ts`: 1012 lines
+  - `core/interceptor/fetch-hook.ts`: 917 lines
+  - `entrypoints/sidepanel/pages/SettingsPage.tsx`: 662 lines
+  - `core/automation/runner.ts`: 595 lines
+  - `entrypoints/sidepanel/pages/AutomationPage.tsx`: 569 lines
+- Tool schemas are not structured data; this blocks safe dynamic MCP schema injection.
+- DOM selectors rely on DeepSeek markup and need defensive fallback behavior.
 
-- `fetch-hook.ts` is too large for safe feature growth.
-- Message action types do not cover all current runtime messages.
-- There is no runtime validation for persisted objects.
-- There is no existing concept of background jobs, run locks, retry policy, or run history.
-- Side panel has no route/state persistence; tabs are local React state only.
+## Compatibility Concerns
 
-### Compatibility Concerns
-
-- Manifest needs `alarms`; adding it changes extension permission surface.
-- Automation execution tabs require `chat.deepseek.com` availability and active login.
-- New automation stores must be versioned for future sync/export.
-- Existing WebDAV sync currently covers memories/skills/presets only; automations should remain local in MVP unless explicitly expanded.
-- Existing prompt augmentation will apply to automation messages unless a bypass/tag is designed.
-
-### Recommended Implementation Boundary
-
-Add the feature in slices:
-
-1. `core/automation/types.ts`, `core/automation/store.ts`, `core/automation/schedule.ts`.
-2. Background automation CRUD, alarm lifecycle, due-task scanner, run locking.
-3. Content/main-world automation bridge with commands such as `AUTOMATION_RUN_REQUEST` and `AUTOMATION_RUN_RESULT`.
-4. Main-world DeepSeek runner that can create/continue a chat session and return message IDs/status.
-5. Side panel Automation tab with compact task and run controls.
-6. Verification harness using the live DeepSeek page plus TypeScript compile.
+- Existing memory tools must remain backward-compatible with stored/visible/restored tool execution blocks.
+- Legacy DSML tool parsing should keep working unless explicitly deprecated.
+- WebDAV sync currently syncs memory/skills/presets only; MCP config may contain secrets and should not be synced by default.
+- MCP server credentials should not be exported with normal memory backups.
+- Host permission flow must continue to work under Chrome MV3 and WXT manifest generation.
+- Result rendering should remain visually consistent with the existing "已执行工具" block.

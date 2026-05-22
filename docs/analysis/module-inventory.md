@@ -2,160 +2,160 @@
 
 | Module | Responsibility | Dependencies | Files | Lines | Complexity | S.U.P.E.R Score |
 |:--|:--|:--|--:|--:|:--|:--|
-| Extension manifest/config | WXT build and Chrome manifest permissions | WXT, React module | 2 | 133 | Low | S green, U green, P yellow, E yellow, R yellow |
-| Background orchestration | Runtime message router, storage coordination, broadcasts | Core stores, Chrome runtime/tabs/sidePanel | 1 | 242 | Medium | S yellow, U green, P yellow, E yellow, R yellow |
-| Main-world bridge | Installs page hooks and forwards page events to content script | Fetch hook, skill popup, page window messages | 1 | 79 | Medium | S green, U green, P yellow, E yellow, R yellow |
-| Content script | DOM integration, tool execution, tool result rendering, restore | Chrome runtime/storage, core tool parser | 1 | 942 | High | S red, U yellow, P yellow, E yellow, R red |
-| Interceptor | DeepSeek request augmentation, SSE filtering, history/IDB cleanup | Constants, memory injector, skill parser, SSE/tool parsers | 3 | 1106 | Critical | S red, U yellow, P yellow, E red, R red |
-| Memory system | Memory DB, scoring, prompt injection | Dexie, constants/types | 3 | 251 | Medium | S green, U green, P yellow, E yellow, R yellow |
-| Skill system | Built-in/custom skill registry and slash parser | Chrome storage, builtin data | 3 | 297 | Medium | S yellow, U green, P yellow, E yellow, R yellow |
-| Preset/model/background stores | Lightweight config persistence | Chrome storage | 3 | 89 | Low | S green, U green, P yellow, E yellow, R yellow |
-| Sync system | WebDAV config/client/merge | Fetch, Chrome permissions, core types | 3 | 122 | Medium | S green, U green, P green, E yellow, R green |
-| Side panel UI | React management UI for memory/skill/preset/settings | Chrome runtime messages, components | 16 | 1837 | High | S yellow, U green, P yellow, E yellow, R yellow |
-| Shared types/messaging/constants | Cross-module data contracts and endpoint constants | None / Chrome runtime | 3 | 288 | Medium | S yellow, U green, P yellow, E yellow, R yellow |
+| Background service worker | Message routing, persistence orchestration, sync, automation execution | memory, skill, preset, automation, sync, Chrome APIs | 1 | 491 | High | S🟡 U🟡 P🟡 E🟡 R🟡 |
+| Content script | Page bridge, built-in tool execution, DOM rendering, restoration, background image integration | constants, tool parser, automation messages, Chrome APIs, DOM | 1 | 1012 | Critical | S🔴 U🟡 P🟡 E🟡 R🔴 |
+| Main-world script | Network hook installation, page-context state sync, automation runner dispatch | fetch hook, skill popup, automation runner | 1 | 115 | Medium | S🟢 U🟢 P🟡 E🟡 R🟡 |
+| Interceptor | Prompt augmentation, SSE parsing, XML tool stripping, history cleanup | constants, memory injector, skill parser, SSE parser, tool parser | 3 | 1106 | Critical | S🔴 U🟡 P🔴 E🟡 R🔴 |
+| Memory | Memory persistence, selection, prompt augmentation | Dexie, constants | 3 | 251 | Medium | S🟡 U🟢 P🟡 E🟢 R🟡 |
+| Skill | Built-in/custom skill registry and slash parsing | Chrome Storage, constants | 3 | 297 | Low | S🟢 U🟢 P🟡 E🟢 R🟡 |
+| Preset/model/background stores | Small Chrome Storage-backed config stores | Chrome Storage | 4 | 116 | Low | S🟢 U🟢 P🟡 E🟡 R🟢 |
+| Automation | Automation types, storage, scheduling, DeepSeek runner, PoW | Chrome Storage, DeepSeek APIs, SSE parser, SHA3 | 7 | 2011 | Critical | S🟡 U🟢 P🟢 E🟡 R🟡 |
+| Sync | WebDAV config/client and data merge | Chrome permissions, fetch | 3 | 122 | Medium | S🟢 U🟢 P🟡 E🟡 R🟡 |
+| Sidepanel UI | React management UI for memory, skills, presets, automation, settings | React, Chrome runtime messages | 14 | 2222 | High | S🟡 U🟢 P🟡 E🟡 R🟡 |
+| Shared types/constants | Cross-module types, tool schemas, prompt templates | automation types | 2 | 288 | High | S🔴 U🟢 P🔴 E🟡 R🔴 |
 
-> S.U.P.E.R scoring uses green/yellow/red words to keep the files ASCII-friendly.
+## Module Details
 
-### Extension Manifest/Config
+### Background Service Worker
 
-- **Path**: `wxt.config.ts`, `package.json`
-- **Responsibility**: Define build, manifest metadata, permissions, and scripts.
-- **Public API**: N/A.
-- **Internal Dependencies**: None.
-- **External Dependencies**: WXT, React, Dexie, Tailwind.
-- **Complexity Rating**: Low.
-- **Transformation Notes**: Automation requires `alarms`; direct background execution may also require careful host permission handling, but the preferred runner remains DeepSeek page-side.
-- **S.U.P.E.R Assessment**:
-  - **S**: Mostly single-purpose.
-  - **U**: Configuration points outward only.
-  - **P**: No schema for permissions or feature flags.
-  - **E**: Hardcoded host permission for `chat.deepseek.com` is intentional.
-  - **R**: Replacing scheduler strategy changes manifest permissions.
-
-### Background Orchestration
-
-- **Path**: `entrypoints/background.ts`
-- **Responsibility**: Handle runtime messages, call stores, broadcast state to side panel and DeepSeek tabs.
-- **Public API**: Message types such as `GET_MEMORIES`, `SAVE_SKILL`, `WEBDAV_SYNC`, `SAVE_BACKGROUND`.
-- **Internal Dependencies**: Memory, skill, preset, model, background, sync stores.
-- **External Dependencies**: Chrome `runtime`, `tabs`, `sidePanel`.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Natural home for automation CRUD, due-task scanning, alarm registration, active/pause state, and dispatch to execution tab.
-- **S.U.P.E.R Assessment**:
-  - **S**: Message router is broad and will grow; automation should move logic into `core/automation/*`.
-  - **U**: Current flow is sidepanel/content -> background -> stores/tabs.
-  - **P**: Message payloads are typed but not runtime-validated.
-  - **E**: Depends on Chrome MV3 APIs by design.
-  - **R**: Scheduler can be replaceable if background only depends on automation service functions.
-
-### Main-World Bridge
-
-- **Path**: `entrypoints/main-world.content.ts`
-- **Responsibility**: Install hooks in the page main world and pass events to/from isolated content script.
-- **Public API**: `window.postMessage` event protocol with `SYNC_STATE`, `TOOL_CALL`, `EXECUTE_TOOL_CALL`, `RESPONSE_COMPLETE`.
-- **Internal Dependencies**: `core/interceptor/fetch-hook`, `core/ui/skill-popup`.
-- **External Dependencies**: DeepSeek page globals, DOM, fetch/XHR.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Best place to add an automation runner bridge because it can call page-context APIs and preserve DeepSeek web challenge behavior.
-- **S.U.P.E.R Assessment**:
-  - **S**: Currently focused on bridge setup.
-  - **U**: Events flow main-world -> content -> background.
-  - **P**: Message protocol lacks explicit union types for automation commands.
-  - **E**: DeepSeek-page-specific.
-  - **R**: Runner should be separate from hook installation to avoid coupling.
+- Path: `entrypoints/background.ts`
+- Responsibility: routes all extension messages, coordinates storage updates, handles sync, schedules automations, finds DeepSeek tabs, and sends automation run requests.
+- Public API: `chrome.runtime.onMessage` actions in `MessageAction`; helper functions such as `executeAutomationRun`, `broadcastStateUpdate`, and `broadcastAutomationUpdate`.
+- Internal dependencies: memory, skill, preset, automation, model, background, sync modules.
+- External dependencies: Chrome extension APIs.
+- Complexity rating: High.
+- MCP transformation notes: MCP server config, tool discovery, invocation, permission grants, and health checks should be delegated into new `core/mcp/*` modules; `background.ts` should only route typed messages.
+- S.U.P.E.R assessment:
+  - S: Partial. It is currently a broad coordinator and message router.
+  - U: Partial. Flow is mostly sidepanel/content -> background -> stores/tabs, but this file owns many unrelated workflows.
+  - P: Partial. Message types exist, but runtime validation is minimal.
+  - E: Partial. Chrome-specific by design; that is acceptable at entrypoint level.
+  - R: Partial. Replacing sync, automation, or future MCP should be possible only if routing stays thin.
 
 ### Content Script
 
-- **Path**: `entrypoints/content.ts`
-- **Responsibility**: Execute local tools, render tool result blocks, restore persisted tool blocks, sync UI/background state.
-- **Public API**: Window message listener from main world; Chrome runtime listener for state/background updates.
-- **Internal Dependencies**: Types, constants, tool parser.
-- **External Dependencies**: DeepSeek DOM, Chrome runtime/storage.
-- **Complexity Rating**: High.
-- **Transformation Notes**: Automation needs a content bridge to receive background dispatch and talk to main-world runner; avoid placing scheduling or DeepSeek request assembly here.
-- **S.U.P.E.R Assessment**:
-  - **S**: Violates single purpose; tool execution, DOM rendering, persistence, cleanup, restore all live together.
-  - **U**: Mostly one-way, but DOM restoration and storage can obscure flow.
-  - **P**: Tool execution result shape exists; bridge messages are not centralized.
-  - **E**: DeepSeek DOM selectors and Chrome storage are embedded.
-  - **R**: Hard to replace rendering without touching execution flow.
+- Path: `entrypoints/content.ts`
+- Responsibility: bridges main-world messages to Chrome runtime, executes built-in memory tools, renders and restores tool result blocks, cleans raw tool XML from the DOM, handles automation bridge, and applies background image behavior.
+- Public API: window message handling for `TOOL_CALL`, `EXECUTE_TOOL_CALL`, `RESPONSE_COMPLETE`, and automation bridge messages.
+- Internal dependencies: constants, tool parser, automation messages, background config.
+- External dependencies: DOM APIs and Chrome runtime messaging.
+- Complexity rating: Critical.
+- MCP transformation notes: MCP tool execution must not be added as another large branch inside `executeToolCall`. Create a tool executor registry with built-in memory executor and MCP executor behind the same interface.
+- S.U.P.E.R assessment:
+  - S: Violation. Page DOM behavior, tool execution, restoration, bridge logic, and background image behavior are mixed.
+  - U: Partial. It is correctly positioned between main-world and background, but execution logic is embedded locally.
+  - P: Partial. `ToolCall` is typed, but tool-specific payload/result contracts are loose.
+  - E: Partial. DOM selectors are tightly coupled to DeepSeek markup.
+  - R: Violation. Swapping tool execution or UI rendering has high blast radius today.
+
+### Main-World Script
+
+- Path: `entrypoints/main-world.content.ts`
+- Responsibility: installs network hooks, receives synced extension state, posts tool calls to content, and runs automation in the DeepSeek page context.
+- Public API: `window.postMessage` protocol between main-world and content.
+- Internal dependencies: `fetch-hook`, skill popup, automation runner.
+- External dependencies: DeepSeek page globals, browser `window` APIs.
+- Complexity rating: Medium.
+- MCP transformation notes: main-world should receive only serializable tool schema metadata and callbacks, not MCP connection details.
+- S.U.P.E.R assessment:
+  - S: Compliant. The file mostly adapts between page context and extension context.
+  - U: Compliant. Messages flow through content into background.
+  - P: Partial. Existing message protocol is typed in practice but not centrally defined for all tool messages.
+  - E: Partial. Main-world is page-specific by nature.
+  - R: Partial. Hook implementation can be replaced, but message names are still string-based.
 
 ### Interceptor
 
-- **Path**: `core/interceptor/*`
-- **Responsibility**: Modify DeepSeek completion requests, parse SSE responses, hide/restore tool calls in stream/history/IndexedDB.
-- **Public API**: `installFetchHook`, `updateHookState`, parser helpers.
-- **Internal Dependencies**: Constants, memory injector, skill parser, tool parser.
-- **External Dependencies**: DeepSeek `/api/v0/chat/completion`, `/api/v0/chat/history_messages`, page `fetch`, `XMLHttpRequest`, IndexedDB.
-- **Complexity Rating**: Critical.
-- **Transformation Notes**: Automation should not bloat `fetch-hook.ts` further. Extract DeepSeek SSE/client helpers and an automation request runner with explicit contracts.
-- **S.U.P.E.R Assessment**:
-  - **S**: Major hotspot; one file handles request mutation, stream filtering, XHR wrapping, history cleanup, IDB cleanup.
-  - **U**: Core logic depends on page/infrastructure details.
-  - **P**: Some parser contracts exist, but no formal DeepSeek event schema.
-  - **E**: Strongly environment-bound to current DeepSeek web internals.
-  - **R**: Replacement cost is high; changes can affect memory, tools, history, and UI.
+- Path: `core/interceptor/`
+- Responsibility: modifies DeepSeek request prompts, parses SSE chunks, extracts tool calls, hides XML tags from stream/history/DOM, and tracks completed responses.
+- Public API: `installFetchHook`, `updateHookState`, `extractToolCalls`, `stripToolCalls`, `parseSSEChunk`.
+- Internal dependencies: constants, memory injector, skill parser.
+- External dependencies: DeepSeek request and streaming response formats.
+- Complexity rating: Critical.
+- MCP transformation notes: hardcoded `TOOL_NAMES`, `TOOL_CALL_REGEX`, and memory schemas must become dynamic tool metadata. A future `ToolDescriptor` list should drive prompt schema, parser matching, and filtering.
+- S.U.P.E.R assessment:
+  - S: Violation. `fetch-hook.ts` combines prompt building, response filtering, history cleanup, and stream state machine logic.
+  - U: Partial. It depends inward on memory/skill modules rather than receiving a fully built prompt context.
+  - P: Violation. Tool schemas are string constants, not contract objects.
+  - E: Partial. It is strongly tied to DeepSeek API shape.
+  - R: Violation. Adding tool types currently requires edits across constants, parser, filter, and content executor.
 
-### Memory System
+### Memory
 
-- **Path**: `core/memory/*`
-- **Responsibility**: Store, select, score, touch, archive, and inject memories.
-- **Public API**: Store CRUD, selector, injector.
-- **Internal Dependencies**: Types/constants.
-- **External Dependencies**: Dexie.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Automation prompts can use existing memory injection only if intentionally configured; MVP should default to existing global behavior through the same completion hook.
-- **S.U.P.E.R Assessment**:
-  - **S**: Split across store/selector/injector.
-  - **U**: Store -> selector/injector flow is understandable.
-  - **P**: TypeScript interfaces exist; no migrations for automation data yet.
-  - **E**: IndexedDB dependency is explicit.
-  - **R**: Could swap selector with limited impact.
+- Path: `core/memory/`
+- Responsibility: stores memories, selects relevant memories, and injects memory context into prompts.
+- Public API: `getAllMemories`, `saveMemory`, `updateMemory`, `deleteMemory`, `buildAugmentedPrompt`.
+- Internal dependencies: constants.
+- External dependencies: Dexie.
+- Complexity rating: Medium.
+- MCP transformation notes: memory tools should become one implementation of a generic local tool provider, not the only tool provider.
+- S.U.P.E.R assessment:
+  - S: Partial. Storage, selection, and injection are separated but still coupled through constants.
+  - U: Compliant. Prompt injection reads selected memory state without reverse dependencies.
+  - P: Partial. Memory types are explicit, but tool schemas are not derived from typed contracts.
+  - E: Compliant. Storage dependency is declared and local.
+  - R: Partial. Replacement cost is moderate because prompt templates embed memory tools.
 
-### Skill System
+### Skill
 
-- **Path**: `core/skill/*`
-- **Responsibility**: Built-in skill definitions, custom skill persistence, slash command parser.
-- **Public API**: `getAllSkills`, `saveSkill`, `parseSkillCommand`.
-- **Internal Dependencies**: Types/constants.
-- **External Dependencies**: Chrome storage.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Automations may reuse prompts containing slash skills because existing request modification already resolves skill commands.
-- **S.U.P.E.R Assessment**:
-  - **S**: Built-in data file is large but registry/parser are focused.
-  - **U**: UI/background -> registry -> storage.
-  - **P**: Skill interface is typed.
-  - **E**: Chrome storage dependency is embedded.
-  - **R**: Custom skill backend can be swapped with moderate changes.
+- Path: `core/skill/`
+- Responsibility: stores built-in/custom skills and parses slash invocations.
+- Public API: `getAllSkills`, `saveSkill`, `deleteSkill`, `parseSkillCommand`.
+- Internal dependencies: constants and `BUILTIN_SKILLS`.
+- External dependencies: Chrome Storage.
+- Complexity rating: Low.
+- MCP transformation notes: skills could later declare allowed MCP tools, but the first MCP design should not overload Skill definitions.
+- S.U.P.E.R assessment:
+  - S: Compliant.
+  - U: Compliant.
+  - P: Partial. Skill shape is typed but not schema-versioned.
+  - E: Compliant.
+  - R: Partial. Replacing storage is easy; replacing invocation syntax is moderate.
 
-### Side Panel UI
+### Automation
 
-- **Path**: `entrypoints/sidepanel/*`
-- **Responsibility**: User management UI.
-- **Public API**: React components/pages, Chrome runtime messages.
-- **Internal Dependencies**: Core types, constants.
-- **External Dependencies**: React, Chrome runtime.
-- **Complexity Rating**: High.
-- **Transformation Notes**: Add an Automation tab/page rather than crowding Settings. Expected controls: run now, pause/resume, cron/RRULE, session link, run history, last/next run.
-- **S.U.P.E.R Assessment**:
-  - **S**: Pages mostly separated; Settings is large.
-  - **U**: UI sends messages to background and listens for updates.
-  - **P**: No shared runtime validation for message payloads.
-  - **E**: Chrome runtime dependency is expected.
-  - **R**: UI components are replaceable if automation API is clean.
+- Path: `core/automation/`
+- Responsibility: stores automation definitions/runs, calculates schedules, executes DeepSeek page API runs, handles PoW, and reconciles history.
+- Public API: automation store functions, schedule validation, `runAutomation`, `runDeepSeekAutomation`, automation bridge message types.
+- Internal dependencies: SSE parser, constants.
+- External dependencies: Chrome Storage, DeepSeek APIs, `js-sha3`.
+- Complexity rating: Critical.
+- MCP transformation notes: if automation prompts should use MCP, `AutomationRunnerRequest` needs either injected MCP tool schema or a shared prompt augmentation service. Tool execution during automation also needs a path back to background MCP execution.
+- S.U.P.E.R assessment:
+  - S: Partial. Submodules are reasonably focused, but runner remains large.
+  - U: Compliant. Scheduler -> runner -> DeepSeek result flow is clear.
+  - P: Compliant. Automation request/result contracts are explicit and serializable.
+  - E: Partial. DeepSeek endpoints and PoW script URLs are hardcoded in page runner.
+  - R: Partial. Replacing the DeepSeek runner is feasible but not cheap.
 
-### Shared Types/Messaging/Constants
+### Sidepanel UI
 
-- **Path**: `core/types.ts`, `core/messaging.ts`, `core/constants.ts`
-- **Responsibility**: Cross-module types, message helper, endpoint/tool constants.
-- **Public API**: Core interfaces and constants.
-- **Internal Dependencies**: None.
-- **External Dependencies**: Chrome runtime in messaging helper.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Add explicit automation types and message actions here, but avoid making `core/types.ts` a dumping ground.
-- **S.U.P.E.R Assessment**:
-  - **S**: Types file is becoming broad.
-  - **U**: Constants/types are leaf dependencies.
-  - **P**: Good TypeScript start; runtime validation absent.
-  - **E**: Endpoint constants are hardcoded.
-  - **R**: Splitting automation types later is low risk if imports are narrow.
+- Path: `entrypoints/sidepanel/`
+- Responsibility: exposes management screens for memory, skills, presets, automation, settings, sync, model mode, and background image.
+- Public API: React components and Chrome runtime message calls.
+- Internal dependencies: shared types, automation schedule validator.
+- External dependencies: React and Chrome extension APIs.
+- Complexity rating: High.
+- MCP transformation notes: add a dedicated MCP page if the feature includes server list, connection status, discovered tools, permission toggles, and test invocation. SettingsPage is already large and should not absorb a full MCP manager.
+- S.U.P.E.R assessment:
+  - S: Partial. Pages are split, but SettingsPage and AutomationPage are large.
+  - U: Compliant. UI talks to background via messages.
+  - P: Partial. Runtime message payloads are typed but not validated.
+  - E: Partial. Chrome runtime APIs are used directly in pages.
+  - R: Partial. Replacing UI widgets is feasible; replacing message contracts requires cross-file edits.
+
+### Shared Types And Constants
+
+- Path: `core/types.ts`, `core/constants.ts`
+- Responsibility: central type definitions, DeepSeek constants, prompt templates, tool schemas, and parser regex.
+- Public API: most cross-module types and constants.
+- Internal dependencies: automation types.
+- External dependencies: none.
+- Complexity rating: High.
+- MCP transformation notes: tool-related constants should move into a dynamic tool descriptor system; `core/types.ts` should not become a dumping ground for all MCP types.
+- S.U.P.E.R assessment:
+  - S: Violation. Tool schema strings, prompt templates, API URLs, regex, and stop words coexist.
+  - U: Compliant. Shared modules do not import runtime entrypoints.
+  - P: Violation. Schemas are string blobs rather than structured descriptors.
+  - E: Partial. DeepSeek URL constants are hardcoded.
+  - R: Violation. Tool replacement requires broad constant edits.

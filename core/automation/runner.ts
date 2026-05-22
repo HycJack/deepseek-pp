@@ -5,6 +5,10 @@ import {
   parseSSEChunk,
   parseSSEData,
 } from '../interceptor/sse-parser';
+import { extractToolCalls } from '../interceptor/tool-parser';
+import { buildPromptAugmentation } from '../prompt';
+import { DEFAULT_TOOL_DESCRIPTORS } from '../tool';
+import type { ToolCall, ToolExecutionRecord, ToolResult } from '../types';
 import { createAutomationRunnerFailure } from './messages';
 import {
   solvePowChallengeLocally,
@@ -32,6 +36,12 @@ const KNOWN_POW_WORKER_URLS = [
   'https://fe-static.deepseek.com/chat/static/38401.a8c4129551.js',
 ];
 const POW_WORKER_TIMEOUT_MS = 15_000;
+const AUTOMATION_MCP_CONTINUATION_LIMIT = 3;
+const BYPASS_HOOK_HEADER = 'X-DPP-Bypass-Hook';
+
+export interface AutomationRunnerOptions {
+  executeToolCall?: (call: ToolCall) => Promise<ToolResult>;
+}
 
 class DeepSeekAuthError extends Error {
   constructor(message: string) {
@@ -55,9 +65,12 @@ class DeepSeekSessionError extends Error {
 }
 
 class DeepSeekPayloadError extends Error {
-  constructor(message: string) {
+  readonly retryable: boolean;
+
+  constructor(message: string, options?: { retryable?: boolean }) {
     super(message);
     this.name = 'DeepSeekPayloadError';
+    this.retryable = options?.retryable ?? false;
   }
 }
 
@@ -78,6 +91,7 @@ let powWorkerUrlsPromise: Promise<string[]> | null = null;
 
 export async function runDeepSeekAutomation(
   request: AutomationRunnerRequest,
+  options?: AutomationRunnerOptions,
 ): Promise<AutomationRunnerResult> {
   let chatSessionId = request.chatSessionId;
   let parentMessageId: number | null = null;
@@ -87,48 +101,20 @@ export async function runDeepSeekAutomation(
     const clientHeaders = createDeepSeekClientHeaders();
     chatSessionId ??= await createChatSession(clientHeaders);
     const headers = await createPowHeaders(clientHeaders);
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        ...clientHeaders,
-        ...headers,
-      },
-      body: JSON.stringify({
-        chat_session_id: chatSessionId,
-        parent_message_id: parentMessageId,
-        model_type: normalizeModelType(request.promptOptions.modelType),
-        prompt: request.prompt,
-        ref_file_ids: request.promptOptions.refFileIds,
-        thinking_enabled: request.promptOptions.thinkingEnabled,
-        search_enabled: request.promptOptions.searchEnabled,
-        action: null,
-        preempt: false,
-      }),
+    const { augmented: prompt } = buildPromptAugmentation(request.prompt, {
+      memories: request.promptContext?.memories ?? [],
+      presetContent: request.promptContext?.presetContent ?? null,
+      thinkingEnabled: request.promptOptions.thinkingEnabled,
+      toolDescriptors: request.promptContext?.toolDescriptors ?? DEFAULT_TOOL_DESCRIPTORS,
     });
-
-    if (!response.ok) {
-      return createAutomationRunnerFailure(
-        { ...request, chatSessionId, parentMessageId },
-        'deepseek_completion_http_error',
-        await readFailureMessage(response),
-        'completion',
-        true,
-      );
-    }
-
-    if (!response.body) {
-      return createAutomationRunnerFailure(
-        { ...request, chatSessionId, parentMessageId },
-        'deepseek_completion_empty_body',
-        'DeepSeek completion response did not include a stream body.',
-        'completion',
-        true,
-      );
-    }
-
-    const stream = await readCompletionStream(response);
+    let stream = await submitAutomationPrompt(
+      request,
+      chatSessionId,
+      parentMessageId,
+      prompt,
+      clientHeaders,
+      headers,
+    );
     const assistantMessageId = stream.responseMessageId;
     if (assistantMessageId === null) {
       return createAutomationRunnerFailure(
@@ -140,16 +126,29 @@ export async function runDeepSeekAutomation(
       );
     }
 
+    const toolLoop = await runAutomationToolLoop(
+      request,
+      options,
+      chatSessionId,
+      assistantMessageId,
+      stream.assistantText,
+      clientHeaders,
+      headers,
+    );
+    stream = toolLoop.stream;
+
     const completedAt = Date.now();
-    const history = await readHistorySnapshot(chatSessionId, assistantMessageId).catch(() => null);
-    const nextParentMessageId = history?.parentMessageId ?? assistantMessageId;
+    const finalAssistantMessageId = stream.responseMessageId ?? assistantMessageId;
+    const history = await readHistorySnapshot(chatSessionId, finalAssistantMessageId).catch(() => null);
+    const nextParentMessageId = history?.parentMessageId ?? finalAssistantMessageId;
     const result: AutomationRunnerSuccess = {
       ok: true,
       chatSessionId,
       sessionUrl: buildDeepSeekSessionUrl(chatSessionId),
       parentMessageId: nextParentMessageId,
-      assistantMessageId: history?.assistantMessageId ?? assistantMessageId,
+      assistantMessageId: history?.assistantMessageId ?? finalAssistantMessageId,
       assistantText: stream.assistantText,
+      toolExecutions: toolLoop.executions,
       history,
       completedAt,
     };
@@ -159,6 +158,7 @@ export async function runDeepSeekAutomation(
     const isPowError = err instanceof DeepSeekPowError;
     const isSessionError = err instanceof DeepSeekSessionError;
     const isPayloadError = err instanceof DeepSeekPayloadError;
+    const isRetryablePayloadError = isPayloadError && err.retryable;
     return createAutomationRunnerFailure(
       { ...request, chatSessionId, parentMessageId },
       isAuthError
@@ -172,9 +172,150 @@ export async function runDeepSeekAutomation(
               : 'deepseek_runner_failed',
       err instanceof Error ? err.message : String(err),
       isAuthError ? 'auth' : isPowError ? 'pow' : isSessionError ? 'session' : isPayloadError ? 'completion' : 'runner',
-      !isAuthError && !isPayloadError,
+      !isAuthError && (!isPayloadError || isRetryablePayloadError),
     );
   }
+}
+
+async function submitAutomationPrompt(
+  request: AutomationRunnerRequest,
+  chatSessionId: string,
+  parentMessageId: number | null,
+  prompt: string,
+  clientHeaders: Record<string, string>,
+  powHeaders: Record<string, string>,
+): Promise<StreamSummary> {
+  const response = await fetch(DEEPSEEK_API_URL, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'content-type': 'application/json',
+      [BYPASS_HOOK_HEADER]: '1',
+      ...clientHeaders,
+      ...powHeaders,
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+      parent_message_id: parentMessageId,
+      model_type: normalizeModelType(request.promptOptions.modelType),
+      prompt,
+      ref_file_ids: request.promptOptions.refFileIds,
+      thinking_enabled: request.promptOptions.thinkingEnabled,
+      search_enabled: request.promptOptions.searchEnabled,
+      action: null,
+      preempt: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new DeepSeekPayloadError(await readFailureMessage(response), { retryable: true });
+  }
+
+  if (!response.body) {
+    throw new DeepSeekPayloadError('DeepSeek completion response did not include a stream body.', { retryable: true });
+  }
+
+  return readCompletionStream(response);
+}
+
+async function runAutomationToolLoop(
+  request: AutomationRunnerRequest,
+  options: AutomationRunnerOptions | undefined,
+  chatSessionId: string,
+  assistantMessageId: number,
+  assistantText: string,
+  clientHeaders: Record<string, string>,
+  powHeaders: Record<string, string>,
+): Promise<{ stream: StreamSummary; executions: ToolExecutionRecord[] }> {
+  let stream: StreamSummary = {
+    assistantText,
+    responseMessageId: assistantMessageId,
+    requestMessageId: null,
+    finished: true,
+  };
+  let parentMessageId = assistantMessageId;
+  const executions: ToolExecutionRecord[] = [];
+
+  if (!options?.executeToolCall) return { stream, executions };
+
+  for (let depth = 0; depth < AUTOMATION_MCP_CONTINUATION_LIMIT; depth++) {
+    const calls = extractToolCalls(stream.assistantText, {
+      descriptors: request.promptContext?.toolDescriptors ?? DEFAULT_TOOL_DESCRIPTORS,
+    }).filter((call) => call.provider?.kind === 'mcp');
+    if (calls.length === 0) break;
+
+    const nextExecutions: ToolExecutionRecord[] = [];
+    for (const call of calls) {
+      const result = await options.executeToolCall({
+        ...call,
+        source: {
+          trigger: 'automation',
+          automationId: request.automationId,
+          automationRunId: request.runId,
+          chatSessionId,
+          messageId: parentMessageId,
+        },
+      });
+      const record: ToolExecutionRecord = {
+        name: call.name,
+        provider: call.provider,
+        descriptorId: call.descriptorId,
+        result: {
+          ok: result.ok,
+          summary: result.summary,
+          detail: clampText(result.detail, 4000),
+          output: result.output === undefined ? undefined : clampText(JSON.stringify(result.output), 8000),
+          truncated: result.truncated,
+          error: result.error,
+        },
+      };
+      nextExecutions.push(record);
+      executions.push(record);
+    }
+
+    const continuationPrompt = buildAutomationToolContinuationPrompt(nextExecutions);
+    stream = await submitAutomationPrompt(
+      request,
+      chatSessionId,
+      parentMessageId,
+      continuationPrompt,
+      clientHeaders,
+      powHeaders,
+    );
+    if (stream.responseMessageId === null) break;
+    parentMessageId = stream.responseMessageId;
+  }
+
+  return { stream, executions };
+}
+
+function buildAutomationToolContinuationPrompt(executions: ToolExecutionRecord[]): string {
+  const results = executions.map((execution) => ({
+    tool: execution.name,
+    provider: execution.provider?.displayName,
+    ok: execution.result.ok,
+    summary: execution.result.summary,
+    detail: clampText(execution.result.detail, 4000),
+    output: clampText(
+      execution.result.output === undefined ? undefined : JSON.stringify(execution.result.output),
+      8000,
+    ),
+    truncated: execution.result.truncated === true,
+  }));
+
+  return [
+    '以下是自动化任务刚刚执行的 MCP 工具结果。请基于这些结果继续完成自动化任务。',
+    '如果结果已经足够，请输出最终结论；只有确实需要更多信息时才继续调用工具。',
+    '',
+    '<tool_results>',
+    JSON.stringify(results, null, 2),
+    '</tool_results>',
+  ].join('\n');
+}
+
+function clampText(value: string | undefined, maxLength: number): string | undefined {
+  if (!value) return value;
+  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...[truncated]` : value;
 }
 
 async function createChatSession(clientHeaders: Record<string, string>): Promise<string> {

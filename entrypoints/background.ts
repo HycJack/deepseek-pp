@@ -46,7 +46,24 @@ import { getBackgroundConfig, saveBackgroundConfig, clearBackgroundConfig } from
 import { getSyncConfig, saveSyncConfig } from '../core/sync/config';
 import { webdavTest, webdavMkcol, webdavGet, webdavPut } from '../core/sync/webdav-client';
 import { mergeMemories, mergeSkills, mergePresets } from '../core/sync/merge';
-import type { BackgroundConfig, Memory, ModelType, NewMemory, Skill, SyncConfig, SystemPromptPreset } from '../core/types';
+import { DEFAULT_TOOL_DESCRIPTORS } from '../core/tool/invocation';
+import { clearToolCallHistory, getToolCallHistory } from '../core/tool/history';
+import {
+  executeRuntimeToolCall,
+  getRuntimeToolDescriptors,
+  refreshRuntimeToolDescriptors,
+} from '../core/tool/runtime';
+import {
+  createMcpServer,
+  deleteMcpServer,
+  getAllMcpServers,
+  getMcpToolCache,
+  getMcpServerById,
+  updateMcpServer,
+} from '../core/mcp/store';
+import { refreshMcpServerDiscovery } from '../core/mcp/discovery';
+import { getMcpOriginPattern, requestMcpServerOriginPermission } from '../core/mcp/transports';
+import type { BackgroundConfig, Memory, ModelType, NewMemory, Skill, SyncConfig, SystemPromptPreset, ToolCall } from '../core/types';
 import type {
   AutomationCreateInput,
   AutomationRun,
@@ -58,6 +75,7 @@ import type {
   AutomationTrigger,
   AutomationUpdateInput,
 } from '../core/automation/types';
+import type { McpServerCreateInput, McpServerUpdateInput } from '../core/mcp/types';
 
 const DEEPSEEK_HOME_URL = 'https://chat.deepseek.com/';
 const TAB_READY_TIMEOUT_MS = 20_000;
@@ -233,6 +251,103 @@ async function handleMessage(
       return run;
     }
 
+    case 'GET_MCP_SERVERS':
+      return getAllMcpServers();
+
+    case 'GET_MCP_SERVER': {
+      const { id } = message.payload as { id: string };
+      return getMcpServerById(id);
+    }
+
+    case 'CREATE_MCP_SERVER': {
+      const server = await createMcpServer(message.payload as McpServerCreateInput);
+      await broadcastMcpServersUpdate(sender.tab?.id);
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      return server;
+    }
+
+    case 'UPDATE_MCP_SERVER': {
+      const { id, patch } = message.payload as { id: string; patch: McpServerUpdateInput };
+      const server = await updateMcpServer(id, patch);
+      await broadcastMcpServersUpdate(sender.tab?.id);
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      return server;
+    }
+
+    case 'DELETE_MCP_SERVER': {
+      const { id } = message.payload as { id: string };
+      await deleteMcpServer(id);
+      await broadcastMcpServersUpdate(sender.tab?.id);
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      return { ok: true };
+    }
+
+    case 'GET_MCP_TOOL_CACHE': {
+      const { serverId } = message.payload as { serverId: string };
+      return getMcpToolCache(serverId);
+    }
+
+    case 'REFRESH_MCP_SERVER_TOOLS': {
+      const { serverId } = message.payload as { serverId: string };
+      const cache = await refreshMcpServerDiscovery(serverId);
+      await broadcastMcpServersUpdate(sender.tab?.id);
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      return cache;
+    }
+
+    case 'REQUEST_MCP_SERVER_PERMISSION': {
+      const { serverId } = message.payload as { serverId: string };
+      const server = await getMcpServerById(serverId);
+      if (!server) return { ok: false, error: 'mcp_server_not_found' };
+      if (server.transport.kind === 'native_messaging') return { ok: true, origin: null };
+      try {
+        const origin = getMcpOriginPattern(server);
+        const ok = await requestMcpServerOriginPermission(server);
+        return { ok, origin };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+
+    case 'TEST_MCP_SERVER_CONNECTION': {
+      const { serverId } = message.payload as { serverId: string };
+      const cache = await refreshMcpServerDiscovery(serverId);
+      await broadcastMcpServersUpdate(sender.tab?.id);
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      return {
+        ok: cache.health.status === 'ready',
+        cache,
+        health: cache.health,
+      };
+    }
+
+    case 'GET_TOOL_DESCRIPTORS':
+      return getRuntimeToolDescriptors();
+
+    case 'REFRESH_TOOL_DESCRIPTORS': {
+      const tools = await refreshRuntimeToolDescriptors();
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      await broadcastMcpServersUpdate(sender.tab?.id);
+      return tools;
+    }
+
+    case 'EXECUTE_TOOL_CALL': {
+      const result = await executeRuntimeToolCall(message.payload as ToolCall, 'manual_chat');
+      await broadcastToolCallHistoryUpdate(sender.tab?.id);
+      return result;
+    }
+
+    case 'GET_TOOL_CALL_HISTORY': {
+      const { limit } = (message.payload as { limit?: number } | undefined) ?? {};
+      return getToolCallHistory(limit);
+    }
+
+    case 'CLEAR_TOOL_CALL_HISTORY': {
+      await clearToolCallHistory();
+      await broadcastToolCallHistoryUpdate(sender.tab?.id);
+      return { ok: true };
+    }
+
     case 'GET_CONFIG':
       return { version: '0.1.0' };
 
@@ -364,6 +479,20 @@ async function broadcastAutomationRunUpdate(excludeTabId?: number) {
   await broadcastToTabs({ type: 'AUTOMATION_RUNS_UPDATED' }, excludeTabId);
 }
 
+async function broadcastMcpServersUpdate(excludeTabId?: number) {
+  const servers = await getAllMcpServers();
+  await broadcastToTabs({ type: 'MCP_SERVERS_UPDATED', servers }, excludeTabId);
+}
+
+async function broadcastToolDescriptorsUpdate(excludeTabId?: number) {
+  const toolDescriptors = await getRuntimeToolDescriptors();
+  await broadcastToTabs({ type: 'TOOL_DESCRIPTORS_UPDATED', toolDescriptors }, excludeTabId);
+}
+
+async function broadcastToolCallHistoryUpdate(excludeTabId?: number) {
+  await broadcastToTabs({ type: 'TOOL_CALL_HISTORY_UPDATED' }, excludeTabId);
+}
+
 function registerAutomationScheduler() {
   chrome.alarms
     .create(AUTOMATION_WAKE_ALARM_NAME, { periodInMinutes: AUTOMATION_WAKE_INTERVAL_MINUTES })
@@ -382,10 +511,11 @@ async function handleAutomationScanResult(result: { initialized: number; started
 }
 
 async function executeAutomationRun(request: AutomationRunnerRequest): Promise<AutomationRunnerResult> {
+  const enrichedRequest = await enrichAutomationPromptContext(request);
   const tab = await getAutomationExecutionTab(request.trigger);
   if (!tab?.id) {
     return createAutomationRunnerFailure(
-      request,
+      enrichedRequest,
       'automation_deepseek_tab_not_found',
       'No DeepSeek tab is available for automation execution.',
       'tab',
@@ -394,15 +524,15 @@ async function executeAutomationRun(request: AutomationRunnerRequest): Promise<A
   }
 
   try {
-    const response = await sendAutomationRunToTab(tab.id, request);
+    const response = await sendAutomationRunToTab(tab.id, enrichedRequest);
     if (isAutomationRunnerResult(response)) {
-      if (response.ok && request.trigger === 'manual' && response.sessionUrl) {
+      if (response.ok && enrichedRequest.trigger === 'manual' && response.sessionUrl) {
         await chrome.tabs.update(tab.id, { url: response.sessionUrl, active: true }).catch(() => undefined);
       }
       return response;
     }
     return createAutomationRunnerFailure(
-      request,
+      enrichedRequest,
       'automation_bridge_invalid_response',
       'DeepSeek content bridge returned an invalid automation response.',
       'bridge',
@@ -410,12 +540,39 @@ async function executeAutomationRun(request: AutomationRunnerRequest): Promise<A
     );
   } catch (err) {
     return createAutomationRunnerFailure(
-      request,
+      enrichedRequest,
       'automation_content_bridge_unavailable',
       err instanceof Error ? err.message : String(err),
       'bridge',
       true,
     );
+  }
+}
+
+async function enrichAutomationPromptContext(request: AutomationRunnerRequest): Promise<AutomationRunnerRequest> {
+  try {
+    const [memories, activePreset] = await Promise.all([
+      getAllMemories(),
+      getActivePreset(),
+    ]);
+
+    return {
+      ...request,
+      promptContext: {
+        ...request.promptContext,
+        memories,
+        presetContent: activePreset?.content ?? null,
+        toolDescriptors: await getRuntimeToolDescriptors(),
+      },
+    };
+  } catch {
+    return {
+      ...request,
+      promptContext: {
+        ...request.promptContext,
+        toolDescriptors: [...DEFAULT_TOOL_DESCRIPTORS],
+      },
+    };
   }
 }
 

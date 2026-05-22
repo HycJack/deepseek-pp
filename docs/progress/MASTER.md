@@ -1,17 +1,17 @@
-## DeepSeek++ Codex-Style Automations - Progress Tracker
+## DeepSeek++ MCP Support — Progress Tracker
 
-> **Task**: Build browser-local Codex-style automations for DeepSeek++ with run-now sessions and scheduled continuation in the same automation chat.
+> **Task**: Add MCP support to DeepSeek++ across browser HTTP/SSE/Streamable HTTP, local bridge/native messaging adapters for stdio-backed servers, automatic tool execution, and automation compatibility.
 > **Started**: 2026-05-21
-> **Last Updated**: 2026-05-21
+> **Last Updated**: 2026-05-22
 > **Mode**: GITHUB_STANDARD
 > **Repo**: zhu1090093659/deepseek-pp
 
-### GitHub Resources
+## GitHub Resources
 
-- **All Issues**: `gh issue list -R zhu1090093659/deepseek-pp --label "spec-driven" --state all`
+- **All MCP Issues**: `gh issue list -R zhu1090093659/deepseek-pp --label "spec:mcp" --state all`
 - **Project Board**: Not created because tracking mode is `GITHUB_STANDARD`, not `GITHUB_FULL`.
 
-### References
+## References
 
 - [Project Overview](../analysis/project-overview.md)
 - [Module Inventory](../analysis/module-inventory.md)
@@ -20,65 +20,70 @@
 - [Dependency Graph](../plan/dependency-graph.md)
 - [Milestones](../plan/milestones.md)
 
-### Milestones
+## Milestones
 
 | Phase | Name | Milestone URL | Open | Closed | Total |
 |:--|:--|:--|--:|--:|--:|
-| 1 | Automation Foundation | https://github.com/zhu1090093659/deepseek-pp/milestone/1 | 0 | 3 | 3 |
-| 2 | Scheduler and Execution Bridge | https://github.com/zhu1090093659/deepseek-pp/milestone/2 | 0 | 4 | 4 |
-| 3 | Side Panel Automation UI | https://github.com/zhu1090093659/deepseek-pp/milestone/3 | 0 | 3 | 3 |
-| 4 | Reliability and Compatibility | https://github.com/zhu1090093659/deepseek-pp/milestone/4 | 0 | 3 | 3 |
-| 5 | Verification and Documentation | https://github.com/zhu1090093659/deepseek-pp/milestone/5 | 0 | 3 | 3 |
+| 1 | MCP Tool Platform Refactor | https://github.com/zhu1090093659/deepseek-pp/milestone/6 | 0 | 4 | 4 |
+| 2 | MCP Transport And Server Registry | https://github.com/zhu1090093659/deepseek-pp/milestone/7 | 0 | 5 | 5 |
+| 3 | Chat And Automation MCP Execution | https://github.com/zhu1090093659/deepseek-pp/milestone/8 | 0 | 5 | 5 |
+| 4 | MCP Sidepanel And Permissions | https://github.com/zhu1090093659/deepseek-pp/milestone/9 | 0 | 4 | 4 |
+| 5 | Verification And Documentation | https://github.com/zhu1090093659/deepseek-pp/milestone/10 | 0 | 3 | 3 |
 
-### Issue Mapping
+## Issue Mapping
 
 | Task ID | Issue | Title | Status |
 |:--|:--|:--|:--|
-| T1.1 | #1 | Define automation domain contracts | closed |
-| T1.2 | #2 | Implement automation persistence store | closed |
-| T1.3 | #3 | Implement schedule parser and next-run calculator | closed |
-| T2.1 | #4 | Add background scheduler and run locking | closed |
-| T2.2 | #5 | Add content/main-world automation bridge protocol | closed |
-| T2.3 | #6 | Implement DeepSeek main-world session runner | closed |
-| T2.4 | #7 | Reconcile completion result with history_messages | closed |
-| T3.1 | #8 | Add Automation tab and list page | closed |
-| T3.2 | #9 | Add automation editor form | closed |
-| T3.3 | #10 | Add run controls and run history UI | closed |
-| T4.1 | #11 | Implement DeepSeek tab orchestration and availability checks | closed |
-| T4.2 | #12 | Add retry, timeout, missed-run, and rate-limit policy | closed |
-| T4.3 | #13 | Define compatibility with memory/skill/preset injection | closed |
-| T5.1 | #14 | Add focused compile-time and pure-function checks | closed |
-| T5.2 | #15 | Run live DeepSeek automation verification | closed |
-| T5.3 | #16 | Update README and operator notes | closed |
+| T1.1 | #18 | Define provider-neutral tool contracts | closed |
+| T1.2 | #19 | Refactor memory tools into a local provider | closed |
+| T1.3 | #20 | Make XML parsing and stream filtering descriptor-driven | closed |
+| T1.4 | #21 | Add shared prompt augmentation service for chat and automation | closed |
+| T2.1 | #22 | Add MCP server config store and secret policy | closed |
+| T2.2 | #23 | Implement MCP protocol core | closed |
+| T2.3 | #24 | Add browser HTTP SSE Streamable HTTP transports | closed |
+| T2.4 | #25 | Add stdio bridge and native messaging adapters | closed |
+| T2.5 | #26 | Add discovery cache health checks timeouts and result caps | closed |
+| T3.1 | #27 | Add background tool registry and MCP runtime messages | closed |
+| T3.2 | #28 | Sync dynamic tool descriptors into main-world hook | closed |
+| T3.3 | #29 | Implement automatic MCP result continuation for manual chats | closed |
+| T3.4 | #30 | Implement automation MCP execution loop | closed |
+| T3.5 | #31 | Persist MCP call history and restore result blocks | closed |
+| T4.1 | #32 | Add MCP sidepanel tab and server list detail views | closed |
+| T4.2 | #33 | Add server editor for all supported transports | closed |
+| T4.3 | #34 | Add discovered tool management and automatic execution defaults | closed |
+| T4.4 | #35 | Add connection testing permission prompts and call result states | closed |
+| T5.1 | #36 | Add compile-time and pure MCP smoke checks | closed |
+| T5.2 | #37 | Run live verification with mock MCP and automation | closed |
+| T5.3 | #38 | Update README and operator notes | closed |
 
-### Quick Status Commands
+## Quick Status Commands
 
 ```bash
-# Phase progress
-gh api repos/zhu1090093659/deepseek-pp/milestones --jq '.[] | "\(.title): \(.open_issues) open, \(.closed_issues) closed"'
+# Phase progress for MCP milestones
+gh api 'repos/zhu1090093659/deepseek-pp/milestones?state=all&per_page=100' --jq '.[] | select(.title|contains("MCP") or .title=="Phase 5: Verification And Documentation") | "\(.title): \(.open_issues) open, \(.closed_issues) closed"'
 
-# Open tasks for current phase
-gh issue list -R zhu1090093659/deepseek-pp --milestone "Phase 1: Automation Foundation" --state open --json number,title,labels
+# Open MCP tasks
+gh issue list -R zhu1090093659/deepseek-pp --label "spec:mcp" --state open --json number,title,milestone,labels
 
-# All spec-driven issues
-gh issue list -R zhu1090093659/deepseek-pp --label "spec-driven" --state all --json number,title,state,milestone
+# Active Phase 1 tasks
+gh issue list -R zhu1090093659/deepseek-pp --milestone "Phase 1: MCP Tool Platform Refactor" --state open --json number,title,labels
 ```
 
-### Phase Checklist
+## Phase Checklist
 
-- [x] Phase 1: Automation Foundation (3/3 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/1
-- [x] Phase 2: Scheduler and Execution Bridge (4/4 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/2
-- [x] Phase 3: Side Panel Automation UI (3/3 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/3
-- [x] Phase 4: Reliability and Compatibility (3/3 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/4
-- [x] Phase 5: Verification and Documentation (3/3 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/5
+- [x] Phase 1: MCP Tool Platform Refactor (4/4 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/6
+- [x] Phase 2: MCP Transport And Server Registry (5/5 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/7
+- [x] Phase 3: Chat And Automation MCP Execution (5/5 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/8
+- [x] Phase 4: MCP Sidepanel And Permissions (4/4 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/9
+- [x] Phase 5: Verification And Documentation (3/3 tasks) - https://github.com/zhu1090093659/deepseek-pp/milestone/10
 
-### Execution Telemetry
+## Execution Telemetry
 
 - Per-task execution telemetry should be recorded in the corresponding GitHub Issue comments.
 - Drift state lives in GitHub Milestone descriptions under the `adaptive` YAML block.
 - Before closing any task, record actual effort, S.U.P.E.R score, and unplanned dependency count.
 
-### Current Status
+## Current Status
 
 **Active Phase**: Complete
 
@@ -86,27 +91,36 @@ gh issue list -R zhu1090093659/deepseek-pp --label "spec-driven" --state all --j
 
 **Blockers**: None
 
-### Next Steps
+## Next Steps
 
-1. Keep monitoring DeepSeek web API drift during regular use.
-2. If DeepSeek changes auth, PoW, model type, session creation, or message ID shape again, reopen compatibility work under a new issue.
+1. Reload the unpacked extension from `dist/chrome-mv3/` before browser-side manual verification.
+2. Use `node scripts/mcp-live-mock.mjs --serve` for a local MCP server when testing the sidepanel manually.
+3. Keep future MCP changes covered by `npm run smoke:mcp` and `npm run verify:mcp:mock`.
 
-### Session Log
+## Session Log
 
 | Date | Session | Summary |
 |:--|:--|:--|
-| 2026-05-21 | Planning | Verified DeepSeek web session behavior in Chrome, generated analysis and plan docs, created GitHub labels, milestones, and Issues #1-#16. |
-| 2026-05-21 | T1.1 | Added automation domain contracts, runner request/result types, bridge message types, and automation background message actions. Closed Issue #1. |
-| 2026-05-21 | T1.2 | Added versioned automation persistence store, CRUD APIs, run history APIs, and background message handlers. Closed Issue #2. |
-| 2026-05-21 | T1.3 | Added pure cron/RRULE schedule parser, deterministic next-run calculation, timezone validation, and minimum interval enforcement. Closed Issue #3 and completed Phase 1. |
-| 2026-05-21 | T2.1 | Added alarms permission, background wake alarm, due scanner, missed-run coalescing, and one-run-at-a-time automation locks. Closed Issue #4. |
-| 2026-05-21 | T2.2 | Added typed background-to-content-to-main-world automation bridge with structured result/error propagation. Closed Issue #5. |
-| 2026-05-21 | T2.3-T2.4 | Added DeepSeek main-world automation runner for `/api/v0/chat/completion`, PoW challenge handling, SSE message id extraction, and `/api/v0/chat/history_messages` reconciliation. |
-| 2026-05-21 | T3.1-T3.3 | Added side panel Automation tab, task editor, cron/RRULE/manual scheduling controls, run-now controls, pause/resume, session link, and recent run status. |
-| 2026-05-21 | T4.1-T4.3 | Added DeepSeek tab orchestration, retry/timeout/missed-run policy, PoW worker fallback to local `DeepSeekHashV1` SHA3-256 solving, and documented compatibility with existing memory/skill/preset injection. |
-| 2026-05-21 | T5.1/T5.3 | Verified `npm run compile`, `npm run build`, PoW SHA3 smoke check, and cron/RRULE schedule smoke check; updated README operator notes. Browser policy blocked automated extension-manager reload, so live extension run remains pending. |
-| 2026-05-21 | T5.2 follow-up | Fixed live `create_pow_challenge` failure by matching DeepSeek's authenticated HTTP client headers: read page `userToken`, send `Authorization: Bearer ...`, `X-App-Version`, and `x-client-*` headers for PoW, completion, and history requests. Verified `npm run compile` + `npm run build`. |
-| 2026-05-21 | T5.2 follow-up | Matched DeepSeek's first-run session flow: new automation runs now call `POST /api/v0/chat_session/create` with authenticated client headers, use the returned `chat_session.id` for completion, and keep existing automation sessions on later runs. Verified `npm run compile` + `npm run build`. |
-| 2026-05-21 | T5.2 follow-up | Fixed `model_type` deserialization failure by changing the automation default from `chat` to DeepSeek's accepted `default`, mapping legacy saved values to `default` or `expert`, and limiting UI model choices to accepted variants. Verified `npm run compile` + `npm run build`. |
-| 2026-05-21 | T5.2 follow-up | Fixed continuation failure where `parent_message_id` was replayed as a string. Automation now stores and sends DeepSeek message IDs as u32 numbers while migrating existing numeric-string storage on read. Verified `npm run compile` + `npm run build`. |
-| 2026-05-21 | T5.2 closeout | User confirmed live automation works after reloading the updated extension. Closed Issue #15, completed Phase 5, and closed all spec-driven milestones. |
+| 2026-05-21 | Planning | Archived completed DeepSeek automation spec, analyzed MCP integration risks, confirmed full-scope MCP target, generated plan docs, created GitHub labels/milestones/Issues #18-#38, and initialized progress tracking. |
+| 2026-05-21 | T1.1 | Added provider-neutral tool contracts in `core/tool/*`, bridged them through `core/types.ts`, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #18. |
+| 2026-05-21 | T1.2 | Moved memory tool execution behind the local provider adapter, preserved existing memory XML/result behavior, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #19. |
+| 2026-05-21 | T1.3 | Added descriptor-driven XML parsing and stream/history filtering, enabled runtime tool descriptor sync into the main-world hook, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #20. |
+| 2026-05-21 | T1.4 | Added shared prompt augmentation in `core/prompt`, moved manual chat and automation onto the same tool schema renderer, verified `npm run compile` and `npm run build`, recorded telemetry, closed Issue #21, and closed Phase 1 milestone #6. |
+| 2026-05-21 | T2.1 | Added versioned MCP server config types/store with secret redaction, background CRUD messages, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #22. |
+| 2026-05-21 | T2.2 | Added transport-agnostic MCP protocol client, initialize/list/call helpers, MCP tool descriptor/result normalization, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #23. |
+| 2026-05-21 | T2.3 | Added browser HTTP, Streamable HTTP, and legacy SSE MCP transports with per-origin permission handling, bounded transport errors, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #24. |
+| 2026-05-21 | T2.4 | Added stdio bridge and native messaging MCP transports, wired transport factory and nativeMessaging permission, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #25. |
+| 2026-05-21 | T2.5 | Added MCP discovery cache, health records, refreshable cache actions, bounded timeout/result-cap execution path, verified `npm run compile` and `npm run build`, recorded telemetry, closed Issue #26, and closed Phase 2 milestone #7. |
+| 2026-05-21 | T3.1 | Added background tool registry/runtime messages for descriptors, refresh, execution, and call history, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #27. |
+| 2026-05-21 | T3.2 | Synced dynamic tool descriptors into content/main-world state, routed tool execution through background runtime, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #28. |
+| 2026-05-21 | T3.3 | Added bounded manual-chat MCP result continuation with same-session follow-up prompts, preserved visible result blocks, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #29. |
+| 2026-05-21 | T3.4 | Added automation MCP execution/continuation loop with dynamic descriptors and run-result tool summaries, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #30. |
+| 2026-05-21 | T3.5 | Added bounded MCP execution summary persistence for refresh restore, automation run summaries, and tool history, verified `npm run compile` and `npm run build`, recorded telemetry, closed Issue #31, and closed Phase 3 milestone #8. |
+| 2026-05-21 | T4.1 | Added MCP sidepanel navigation, server list/detail views, empty/loading/error states, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #32. |
+| 2026-05-21 | T4.2 | Added MCP server editor for Streamable HTTP, HTTP, SSE, stdio bridge, and native messaging transports with validation and round-trip persistence, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #33. |
+| 2026-05-21 | T4.3 | Added discovered tool management, visible default auto-execution policy, per-tool enable/disable allowlist behavior, and prompt-injection filtering for disabled/manual tools, verified `npm run compile` and `npm run build`, recorded telemetry, and closed Issue #34. |
+| 2026-05-21 | T4.4 | Added MCP host permission requests, connection test actions, structured latency/error states, and recent MCP call status in the sidepanel, verified `npm run compile` and `npm run build`, recorded telemetry, closed Issue #35, and closed Phase 4 milestone #9. |
+| 2026-05-21 | T5.1 | Added `npm run smoke:mcp` with mock MCP discovery/call flows, descriptor rendering, XML parsing/filtering, and timeout coverage, verified `npm run smoke:mcp`, `npm run compile`, and `npm run build`, recorded telemetry, and closed Issue #36. |
+| 2026-05-21 | T5.2 | Added `npm run verify:mcp:mock` live loopback verification for manual and automation MCP continuations, documented browser/login policy limits in `docs/verification/mcp-live-mock.md`, verified full command set, recorded telemetry, and closed Issue #37. |
+| 2026-05-21 | T5.3 | Updated README, MCP operator notes, verification docs, and progress tracker with supported transports, setup, limits, reload requirements, and troubleshooting; verified full command set, recorded telemetry, closed Issue #38, and closed Phase 5 milestone #10. |
+| 2026-05-22 | Browser bugfix | Guarded content-script runtime and storage calls, runtime-id probes, async page-message handlers, unhandled rejection events, and WXT's bundled `wxt/browser` runtime proxy against Chrome extension reload invalidation, so stale DeepSeek tabs no longer surface uncaught `Extension context invalidated` Promise errors after reloading the unpacked extension. |

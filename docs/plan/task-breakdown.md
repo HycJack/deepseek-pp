@@ -1,134 +1,135 @@
 ## Task Breakdown
 
-### Confirmed Task Definition
+## Confirmed Task Definition
 
-Build Codex-style automations for DeepSeek++.
+Build MCP support into DeepSeek++ with the broadest practical transport coverage: direct browser HTTP/SSE/Streamable HTTP MCP endpoints plus local stdio support through a bridge or Chrome native messaging adapter. MCP tools should execute automatically by default, and both manual DeepSeek chats and scheduled automations must share the same MCP tool discovery, prompt injection, execution, and result-continuation pipeline.
 
-Users can create an automation with a prompt, click to execute it immediately in a new DeepSeek chat session, and attach a cron/RRULE-like frequency so later runs continue in that automation's DeepSeek session. Scheduling and task state live in the extension background. Actual DeepSeek execution runs from the DeepSeek page main-world context so it can reuse the logged-in web session and DeepSeek's current challenge/proof-of-work flow.
+## Overview
 
-### Overview
+- Total phases: 5
+- Total tasks: 21
+- Estimated total effort: XL
+- Tracking mode: GITHUB_STANDARD
 
-| Item | Value |
-|:--|:--|
-| Total phases | 5 |
-| Total tasks | 16 |
-| Estimated total effort | XL |
-| Tracking mode | GITHUB_STANDARD |
-| Primary implementation path | Background scheduler + content/main-world runner + side panel automation UI |
+## S.U.P.E.R Design Constraints
 
-### S.U.P.E.R Design Constraints
+- S: Keep tool contracts, MCP transports, execution routing, UI, and automation loops in separate modules.
+- U: Preserve flow: sidepanel/content -> background -> provider/transport -> result; main-world only handles page-context DeepSeek APIs.
+- P: Define serializable contracts before implementation: `ToolDescriptor`, `ToolCall`, `ToolResult`, `McpServerConfig`, `McpTransportRequest`.
+- E: No hidden global assumptions. Transport type, URL/native host, auth headers, timeout, result size, and enabled tools come from user config.
+- R: Built-in memory tools and MCP tools must both be replaceable providers behind the same execution interface.
 
-- **S (Single Purpose)**: Automation storage, scheduling, tab orchestration, DeepSeek execution, and UI must be separate modules.
-- **U (Unidirectional Flow)**: Side panel and alarms request work from background; background dispatches to content; content forwards to main-world runner; runner returns result.
-- **P (Ports over Implementation)**: Automation objects, run records, bridge messages, and runner results must have explicit TypeScript contracts.
-- **E (Environment-Agnostic)**: DeepSeek URL, minimum interval, history limits, and failure policies should be constants/config, not scattered magic values.
-- **R (Replaceable Parts)**: Schedule parser, storage backend, and runner implementation should be replaceable without changing UI components.
+## Phase 1: Tool Platform Refactor
 
-### Phase 1: Automation Foundation
+Goal: Convert the current hardcoded memory-tool system into a provider-neutral tool platform that can host MCP tools without breaking existing memory behavior.
 
-**Goal**: Establish automation data contracts, persistence, and schedule calculation before wiring execution.
+Prerequisite: Confirmed MCP scope.
 
-**Prerequisite**: Phase 1 analysis complete.
+S.U.P.E.R focus: S, P, R.
 
-**S.U.P.E.R Focus**: S, P, E.
-
-| ID | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
+| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| T1.1 | Define automation domain contracts | P0 | M | None | A | S, P | `Automation`, `AutomationRun`, `AutomationStatus`, runner request/result, and message action types exist; fields include prompt, status, schedule, DeepSeek session id, parent message id, timestamps, and error state |
-| T1.2 | Implement automation persistence store | P0 | M | T1.1 | A | S, P, R | CRUD APIs exist; run history append/update APIs exist; storage shape is migration-friendly; no UI logic in store |
-| T1.3 | Implement schedule parser and next-run calculator | P0 | M | T1.1 | B | S, E, R | Supports RRULE-style minute/hour/day basics used by Codex examples; rejects too-frequent schedules; returns next run from a reference timestamp; unit-like pure functions are compile-safe |
+| T1.1 | Define provider-neutral tool contracts | P0 | M | - | A | P, R | Add serializable descriptor/call/result types; cover built-in and MCP tool identity; compile passes. |
+| T1.2 | Refactor memory tools into a local provider | P0 | M | T1.1 | A | S, R | Memory save/update/delete are exposed through the generic provider interface; existing behavior remains compatible. |
+| T1.3 | Make XML parsing and stream filtering descriptor-driven | P0 | L | T1.1 | B | P, R | Parser/filter accepts runtime tool names; legacy memory and DSML parsing remain supported; raw tool XML is still hidden. |
+| T1.4 | Add shared prompt augmentation service for chat and automation | P0 | L | T1.2, T1.3 | C | U, P | Preset, skill, memory, and tool schema injection can be reused outside `fetch-hook.ts`; compile passes. |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T1.1, T1.2 | M+M | Medium | `core/types.ts`, `core/automation/store.ts` |
-| B | T1.3 | M | Low | `core/automation/schedule.ts` |
+| A | T1.1, T1.2 | L | Medium | `core/types.ts`, `core/tool/*`, `entrypoints/content.ts` |
+| B | T1.3 | L | Medium | `core/interceptor/*`, `core/constants.ts` |
+| C | T1.4 | L | High | `core/memory/injector.ts`, `core/interceptor/fetch-hook.ts`, `core/automation/runner.ts` |
 
-### Phase 2: Scheduler and Execution Bridge
+## Phase 2: MCP Transport And Server Registry
 
-**Goal**: Let background alarms dispatch due automation runs to a DeepSeek page and receive structured results.
+Goal: Add MCP server configuration, discovery, transport adapters, and bounded execution primitives.
 
-**Prerequisite**: Phase 1 complete.
+Prerequisite: Phase 1 contracts exist.
 
-**S.U.P.E.R Focus**: U, P, R.
+S.U.P.E.R focus: P, E, R.
 
-| ID | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
+| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| T2.1 | Add background scheduler and run locking | P0 | L | T1.2, T1.3 | A | U, E | Manifest includes `alarms`; background registers a wake alarm; due scanner handles ACTIVE tasks, missed runs, and one-run-at-a-time locks |
-| T2.2 | Add content/main-world automation bridge protocol | P0 | L | T1.1 | B | U, P | Background can request an automation run from a DeepSeek tab; content forwards to main world; result/error returns through typed messages |
-| T2.3 | Implement DeepSeek main-world session runner | P0 | XL | T2.2 | B | S, P, R | Runner can create a new automation session and continue an existing session through `/api/v0/chat/completion`; result includes session id, latest parent message id, assistant text, and completion status |
-| T2.4 | Reconcile completion result with `history_messages` | P1 | L | T2.3 | C | P, R | After each run, latest message chain can be verified from `/api/v0/chat/history_messages`; stale or missing parent ids are detected and recorded |
+| T2.1 | Add MCP server config store and secret policy | P0 | M | T1.1 | A | P, E | Store enabled servers, transport type, endpoint/native host, headers, timeouts, tool allowlist; secrets excluded from normal sync/export. |
+| T2.2 | Implement MCP protocol core | P0 | L | T1.1 | B | P, R | Implement initialize, list tools, call tool normalization with structured request/result/error types. |
+| T2.3 | Add browser HTTP/SSE/Streamable HTTP transports | P0 | L | T2.2 | B | E, R | Direct browser transports work through fetch/event stream paths and request host permission by origin. |
+| T2.4 | Add stdio bridge and native messaging adapters | P1 | L | T2.2 | C | E, R | Local stdio-backed MCP servers can be reached through configured bridge URL or native host adapter contract. |
+| T2.5 | Add discovery cache, health checks, timeouts, and result caps | P1 | M | T2.1, T2.2 | A | P, E | Tool discovery is cached per server; failures expose structured status; calls are bounded by timeout and result size. |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T2.1 | L | Medium | `entrypoints/background.ts`, `wxt.config.ts`, `core/automation/*` |
-| B | T2.2, T2.3 | L+XL | High | `entrypoints/content.ts`, `entrypoints/main-world.content.ts`, `core/automation/runner.ts` |
-| C | T2.4 | L | Medium | `core/automation/deepseek-history.ts`, runner result handling |
+| A | T2.1, T2.5 | L | Medium | `core/mcp/store.ts`, `core/mcp/types.ts` |
+| B | T2.2, T2.3 | XL | Medium | `core/mcp/client.ts`, `core/mcp/transports/*` |
+| C | T2.4 | L | Low | `core/mcp/transports/native.ts`, `core/mcp/transports/bridge.ts` |
 
-### Phase 3: Side Panel Automation UI
+## Phase 3: Chat And Automation MCP Execution
 
-**Goal**: Give users a compact interface to create, run, schedule, pause, resume, and inspect automations.
+Goal: Wire MCP discovery and automatic execution into both manual chats and scheduled automations, including result continuation loops.
 
-**Prerequisite**: Phase 1 complete; Phase 2 bridge can be mocked if needed.
+Prerequisite: Phases 1 and 2 complete.
 
-**S.U.P.E.R Focus**: S, U, P.
+S.U.P.E.R focus: U, P, R.
 
-| ID | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
+| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| T3.1 | Add Automation tab and list page | P0 | M | T1.2 | A | S, U | Side panel has an Automation tab; list shows name, status, next run, last run, and session link |
-| T3.2 | Add automation editor form | P0 | L | T3.1, T1.3 | A | P, E | Users can edit name, prompt, schedule, enabled state, and minimum interval validation errors |
-| T3.3 | Add run controls and run history UI | P0 | L | T2.1, T2.2, T3.1 | B | U, P | Users can click Run Now, pause/resume, see in-progress state, recent results, error messages, and DeepSeek session URL |
+| T3.1 | Add background tool registry and MCP runtime messages | P0 | M | T1.4, T2.5 | A | U, P | Background exposes get tools, refresh tools, execute call, and call history actions via typed messages. |
+| T3.2 | Sync dynamic tool descriptors into main-world hook | P0 | L | T3.1 | B | U, P | Manual chats receive memory and MCP schemas; parser/filter uses the same dynamic descriptor set. |
+| T3.3 | Implement automatic MCP result continuation for manual chats | P0 | XL | T3.2 | B | U, P | After MCP calls execute, the extension automatically sends bounded tool results back into the same DeepSeek session up to a max iteration count. |
+| T3.4 | Implement automation MCP execution loop | P0 | XL | T3.1, T2.5 | C | U, P | Scheduled/manual automation runs execute MCP calls automatically and continue the same automation session with tool results. |
+| T3.5 | Persist MCP call history and restore result blocks | P1 | M | T3.3, T3.4 | A | S, R | MCP result cards survive refresh and automation history records include tool call summaries without leaking secrets. |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T3.1, T3.2 | M+L | Medium | `entrypoints/sidepanel/App.tsx`, automation page/components |
-| B | T3.3 | L | Medium | automation page/components, background messages |
+| A | T3.1, T3.5 | L | Medium | `entrypoints/background.ts`, `core/mcp/*`, `core/types.ts` |
+| B | T3.2, T3.3 | XL | High | `core/interceptor/fetch-hook.ts`, `entrypoints/content.ts`, `entrypoints/main-world.content.ts` |
+| C | T3.4 | XL | Medium | `core/automation/runner.ts`, `core/automation/types.ts` |
 
-### Phase 4: Reliability, Safety, and Compatibility
+## Phase 4: MCP Sidepanel And Permissions
 
-**Goal**: Make automation behavior predictable under browser sleep, login failure, DeepSeek tab absence, and existing prompt augmentation.
+Goal: Provide a complete management UI for MCP servers, tools, connection status, and automatic execution defaults.
 
-**Prerequisite**: Phases 1-3 complete.
+Prerequisite: MCP store and runtime actions exist.
 
-**S.U.P.E.R Focus**: E, R.
+S.U.P.E.R focus: S, E, R.
 
-| ID | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
+| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| T4.1 | Implement DeepSeek tab orchestration and availability checks | P0 | L | T2.1, T2.2 | A | U, E | Background finds or opens `chat.deepseek.com`; detects unavailable runner/login/input state; records actionable failure |
-| T4.2 | Add retry, timeout, missed-run, and rate-limit policy | P0 | M | T2.1, T2.3 | B | E, R | Runs have timeout; minimum interval enforced; missed runs are either coalesced or skipped by explicit policy; failures do not loop indefinitely |
-| T4.3 | Define compatibility with memory/skill/preset injection | P1 | M | T2.3 | C | P, R | Automation requests either intentionally use existing injection or carry an explicit bypass/tag; behavior is documented and tested |
+| T4.1 | Add MCP sidepanel tab and server list/detail views | P1 | L | T2.1 | A | S, R | A dedicated MCP tab shows configured servers, enabled state, transport type, status, and discovered tool count. |
+| T4.2 | Add server editor for all supported transports | P1 | L | T4.1, T2.1 | A | E, P | Users can configure HTTP/SSE/Streamable HTTP, bridge, and native messaging fields with validation. |
+| T4.3 | Add discovered tool management and automatic execution defaults | P1 | M | T4.1, T3.1 | B | P, E | Users can refresh tools, enable/disable servers/tools, and see that auto execution is the default policy. |
+| T4.4 | Add connection testing, permission prompts, and call result states | P1 | M | T4.2, T4.3 | C | E, R | UI can request host permissions, test connections, display errors, and link recent call outcomes. |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T4.1 | L | Medium | background tab orchestration, bridge |
-| B | T4.2 | M | Medium | scheduler, store, runner |
-| C | T4.3 | M | High | `fetch-hook.ts`, runner integration |
+| A | T4.1, T4.2 | XL | Medium | `entrypoints/sidepanel/App.tsx`, `entrypoints/sidepanel/pages/McpPage.tsx` |
+| B | T4.3 | M | Medium | `entrypoints/sidepanel/pages/McpPage.tsx`, `core/mcp/types.ts` |
+| C | T4.4 | M | Medium | `entrypoints/sidepanel/pages/McpPage.tsx`, `entrypoints/background.ts` |
 
-### Phase 5: Verification and Documentation
+## Phase 5: Verification And Documentation
 
-**Goal**: Prove the feature works locally and document known browser/DeepSeek constraints.
+Goal: Prove the MCP implementation works for manual chats and automations, then document supported transports and operational limits.
 
-**Prerequisite**: Phases 1-4 complete.
+Prerequisite: Phases 1-4 complete.
 
-**S.U.P.E.R Focus**: P, E.
+S.U.P.E.R focus: P, E.
 
-| ID | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
+| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| T5.1 | Add focused compile-time and pure-function checks | P0 | M | T1.3, T2.1 | A | P | `npm run compile` passes; schedule parser has deterministic test cases or equivalent checked examples |
-| T5.2 | Run live DeepSeek automation verification | P0 | M | T2.3, T3.3, T4.1 | B | E | Manual/live checklist validates Run Now creates a session, scheduled run continues it, reload restores history |
-| T5.3 | Update README and operator notes | P1 | S | T5.2 | C | P, E | Docs describe capabilities, limitations, browser sleep behavior, login requirement, and schedule syntax |
+| T5.1 | Add compile-time and pure MCP smoke checks | P0 | M | T4.4 | A | P | `npm run compile` and `npm run build` pass; protocol/transport/parser smoke checks cover representative MCP calls. |
+| T5.2 | Run live verification with mock MCP and automation | P0 | L | T5.1 | A | E | Manual chat and automation task both execute a mock MCP tool automatically and continue with results. |
+| T5.3 | Update README and operator notes | P1 | S | T5.2 | B | E | README explains supported transports, local bridge/native messaging requirements, default auto-execution, and automation compatibility. |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T5.1 | M | Low | schedule tests/checks |
-| B | T5.2 | M | Low | verification notes |
-| C | T5.3 | S | Low | `README.md`, docs |
+| A | T5.1, T5.2 | L | Low | `package.json`, `core/mcp/*`, verification scripts |
+| B | T5.3 | S | Low | `README.md` |
