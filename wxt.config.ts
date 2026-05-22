@@ -11,8 +11,8 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     name: 'DeepSeek++',
-    description: 'Agentic memory & skill system for DeepSeek',
-    version: '0.1.0',
+    description: 'Agentic memory, skill, automation, and MCP tools for DeepSeek',
+    version: '0.2.0',
     permissions: ['sidePanel', 'storage', 'alarms', 'nativeMessaging'],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
     side_panel: {

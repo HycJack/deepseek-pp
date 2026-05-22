@@ -1,8 +1,8 @@
 # DeepSeek++
 
-为 [DeepSeek](https://chat.deepseek.com) 网页版注入 **类原生工具调用**、**Agentic 记忆系统**、**Skill 技能系统**、**系统提示词预设** 和 **自动化任务** 的 Chrome 扩展。
+为 [DeepSeek](https://chat.deepseek.com) 网页版注入 **类原生工具调用**、**MCP 工具系统**、**Agentic 记忆系统**、**Skill 技能系统**、**系统提示词预设** 和 **自动化任务** 的 Chrome 扩展。
 
-让 DeepSeek 像支持原生 tools 一样自动执行记忆保存、更新、删除等动作，拥有跨对话长期记忆，并通过 `/skill` 指令一键切换专家模式；也可以像 Codex 自动化一样，把固定 prompt 放进独立会话里立即运行或按计划重复执行。
+让 DeepSeek 像支持原生 tools 一样自动执行记忆保存、更新、删除和 MCP 工具调用，拥有跨对话长期记忆，并通过 `/skill` 指令一键切换专家模式；也可以像 Codex 自动化一样，把固定 prompt 放进独立会话里立即运行或按计划重复执行。
 
 ## 核心功能
 
@@ -90,23 +90,42 @@
 - 运行超时后不会自动重复发送同一条 prompt，避免 DeepSeek 页面仍在执行时产生重复消息
 - 从源码更新后需要在 Chrome 扩展管理页重新加载 `dist/chrome-mv3/`，再验证侧边栏「自动化」页
 
-### 工作原理
+## 0.2.0 变更回顾
 
-扩展在 main world 中拦截 `fetch` 和 `XMLHttpRequest`，在请求发送到 DeepSeek API 前修改 prompt（注入预设、记忆、技能指令和工具 schema），并解析 SSE 响应流以提取、隐藏和执行工具调用。
+0.2.0 汇总了 0.1.0 以来的所有主要增量，重点是把 DeepSeek++ 从“记忆 + Skill”扩展升级为完整的浏览器端工具平台。
+
+| 方向 | 主要变化 |
+|------|----------|
+| MCP 工具系统 | 新增 MCP 服务配置、工具发现、健康检查、调用历史、结果大小限制和超时控制；支持 Streamable HTTP、HTTP POST、SSE、stdio bridge、Chrome Native Messaging；手动聊天和自动化任务都能自动执行 MCP 工具并把结果 continuation 回同一会话。 |
+| 工具调用内核 | 从固定记忆工具重构为 provider-neutral 工具契约；工具 schema、XML 解析、流式过滤、历史清理和 prompt 注入都改为动态 descriptor 驱动，同时保留旧 DSML 历史兼容。 |
+| 自动化任务 | 新增侧边栏自动化页、任务编辑器、立即运行、cron/RRULE 调度、暂停/恢复、独立 DeepSeek 会话、运行历史、PoW/auth 兼容、错过运行合并和失败状态展示。 |
+| 记忆系统 | 新增记忆更新/删除工具，优化相关记忆筛选、思考模式、自动清理和工具执行折叠展示，刷新页面后能恢复刚执行过的工具状态。 |
+| Skill 与预设 | 新增 `/skill` 自动补全面板、内置/自定义技能管理、系统提示词预设、预设导入，以及 DeepSeek Expert 模式切换。 |
+| 同步与个性化 | 新增 WebDAV 同步记忆、Skill 和预设；新增 DeepSeek 页面自定义背景、动态透明度和模糊控制。 |
+| 文档与发布 | 增补侧边栏截图、MCP 操作说明、mock 验证脚本、TypeScript 修复、release workflow 和构建打包流程。 |
+
+<p align="center">
+  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP 管理侧边栏">
+  <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
+</p>
+
+## 工作原理
+
+扩展在 main world 中拦截 `fetch` 和 `XMLHttpRequest`，在请求发送到 DeepSeek API 前修改 prompt（注入预设、记忆、技能指令和内置/MCP 工具 schema），并解析 SSE 响应流以提取、隐藏和执行工具调用。
 
 ```
-用户输入 → 拦截请求 → 注入预设 + 记忆 + 技能指令 + tools schema → DeepSeek API
-                                                                    ↓
-页面折叠区块 ← 执行结果持久化 ← Content Script 执行工具 ← SSE 流式解析/隐藏工具调用
-       ↓
-侧边栏 ← IndexedDB/Storage ← 记忆保存/更新/删除
+用户输入 → 拦截请求 → 注入预设 + 记忆 + 技能指令 + 内置/MCP tools schema → DeepSeek API
+                                                                        ↓
+页面折叠区块 ← 执行结果持久化 ← 工具运行时 ← SSE 流式解析/隐藏工具调用
+       ↓                         ↓
+侧边栏 ← IndexedDB/Storage ← 内置记忆工具 / MCP 服务
 ```
 
 工具调用链路分为三层：
 
 1. **Main World**：拦截网络请求和响应流，收集完整回复，识别 XML 工具块，过滤页面可见文本。
-2. **Content Script**：接收工具调用，执行记忆增删改，渲染「已执行工具」折叠区块，并恢复刷新后的执行状态。
-3. **Background**：统一处理 `SAVE_MEMORY`、`UPDATE_MEMORY`、`DELETE_MEMORY` 等消息，持久化数据并广播状态更新。
+2. **Content Script**：接收工具调用，路由到统一工具运行时，渲染「已执行工具」折叠区块，并恢复刷新后的执行状态。
+3. **Background**：统一处理记忆、MCP 配置、工具发现/调用、自动化调度、数据持久化和状态广播。
 
 ## 安装
 
@@ -164,7 +183,7 @@ entrypoints/
 ├── background.ts         # Service Worker（消息路由、数据持久化）
 ├── content.ts            # Content Script（DOM 集成、工具执行、结果区块恢复）
 ├── main-world.content.ts # Main World 脚本（网络拦截、工具调用桥接）
-└── sidepanel/            # 侧边栏 React 应用（记忆/技能/预设/自动化/设置页面）
+└── sidepanel/            # 侧边栏 React 应用（记忆/技能/预设/自动化/MCP/设置页面）
 ```
 
 ## 友情链接

@@ -2,9 +2,14 @@ name: Release Extension
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v0.2.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -21,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,17 +57,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ZIP_FILE: ${{ steps.package.outputs.zip_file }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          TAG="auto-${SHORT_SHA}"
-          TITLE="DeepSeek++ ${SHORT_SHA}"
-          NOTES="Automated extension build for commit ${GITHUB_SHA}."
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          VERSION="${TAG#v}"
+          TITLE="DeepSeek++ ${VERSION}"
+          NOTES_FILE="docs/releases/${VERSION}.md"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+
+          if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+            echo "package.json version $PACKAGE_VERSION does not match release tag $TAG" >&2
+            exit 1
+          fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ZIP_FILE" --clobber
           else
-            gh release create "$TAG" "$ZIP_FILE" \
-              --target "$GITHUB_SHA" \
-              --title "$TITLE" \
-              --notes "$NOTES"
+            create_args=("$TAG" "$ZIP_FILE" --title "$TITLE")
+            if [ -f "$NOTES_FILE" ]; then
+              create_args+=(--notes-file "$NOTES_FILE")
+            else
+              create_args+=(--generate-notes)
+            fi
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              create_args+=(--target "$GITHUB_SHA")
+            fi
+            gh release create "${create_args[@]}"
           fi
