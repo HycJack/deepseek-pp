@@ -10,12 +10,16 @@ import {
   hasXmlToolMarker,
   type ToolInvocationCatalog,
 } from '../tool';
-import { extractTextFromParsed, parseSSEChunk, parseSSEData } from './sse-parser';
+import { estimateTokenUnits } from '../token/estimator';
+import { extractTextFromParsed, isResponseTextPatchPath, isStreamFinishedFromParsed, parseSSEChunk, parseSSEData } from './sse-parser';
 import { extractToolCalls, stripToolCalls } from './tool-parser';
 
-const API_PATH = new URL(DEEPSEEK_API_URL).pathname;
+const COMPLETION_PATH = new URL(DEEPSEEK_API_URL).pathname;
+const REGENERATE_PATH = '/api/v0/chat/regenerate';
+const CHAT_STREAM_PATHS = [COMPLETION_PATH, REGENERATE_PATH];
 const HISTORY_PATH = '/api/v0/chat/history_messages';
 const BYPASS_HOOK_HEADER = 'X-DPP-Bypass-Hook';
+const TOKEN_SPEED_EMIT_INTERVAL_MS = 250;
 
 let originalFetch: typeof window.fetch;
 
@@ -29,6 +33,7 @@ interface HookState {
   onToolCall: (call: ToolCall) => void;
   onToolCallExecuted: (call: ToolCall) => Promise<{ ok: boolean; summary: string; detail?: string }>;
   onToolCallsRestored: (records: ToolCallRestoreRecord[]) => void;
+  onResponseTokenSpeed: (progress: ResponseTokenSpeedPayload) => void;
   onResponseComplete: (complete: ResponseCompletePayload) => void;
   onMemoriesUsed: (ids: number[]) => void;
 }
@@ -43,6 +48,7 @@ let hookState: HookState = {
   onToolCall: () => {},
   onToolCallExecuted: async () => ({ ok: true, summary: '' }),
   onToolCallsRestored: () => {},
+  onResponseTokenSpeed: () => {},
   onResponseComplete: () => {},
   onMemoriesUsed: () => {},
 };
@@ -70,6 +76,14 @@ export interface ResponseCompletePayload {
   };
 }
 
+export interface ResponseTokenSpeedPayload {
+  active: boolean;
+  estimatedTokens: number;
+  tokensPerSecond: number;
+  elapsedMs: number;
+  textLength: number;
+}
+
 interface RequestContext {
   chatSessionId: string | null;
   parentMessageId: number | null;
@@ -86,7 +100,7 @@ function hookFetch() {
       return interceptHistoryResponse(originalFetch.call(this, input, init));
     }
 
-    if (!isChatCompletionURL(url) || !init?.body) {
+    if (!isChatStreamURL(url) || typeof init?.body !== 'string') {
       return originalFetch.call(this, input, init);
     }
 
@@ -94,12 +108,11 @@ function hookFetch() {
       return originalFetch.call(this, input, { ...init, headers: stripBypassHookHeader(init.headers) });
     }
 
-    const modified = modifyRequestBody(init.body as string);
-    if (!modified) return originalFetch.call(this, input, init);
-
-    const requestContext = createRequestContext(modified);
-    init = { ...init, body: modified };
-    return interceptFetchResponse(originalFetch.call(this, input, init), requestContext);
+    const modified = modifyRequestBody(init.body);
+    const requestBody = modified ?? init.body;
+    const requestContext = createRequestContext(requestBody);
+    const requestInit = modified ? { ...init, body: modified } : init;
+    return interceptFetchResponse(originalFetch.call(this, input, requestInit), requestContext);
   };
 }
 
@@ -115,15 +128,11 @@ function hookXHR() {
 
   XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null) {
     const url = xhrUrls.get(this);
-    if (url && isChatCompletionURL(url) && typeof body === 'string') {
-      console.log('[DPP] XHR completion intercept', url);
+    if (url && isChatStreamURL(url) && typeof body === 'string') {
       const modified = modifyRequestBody(body);
-      if (modified) {
-        console.log('[DPP] XHR body modified, setting up interceptor');
-        setupXHRResponseInterceptor(this, createRequestContext(modified));
-        return origSend.call(this, modified);
-      }
-      console.log('[DPP] XHR body NOT modified — passing through');
+      const requestBody = modified ?? body;
+      setupXHRResponseInterceptor(this, createRequestContext(requestBody));
+      return origSend.call(this, requestBody);
     }
     if (url && url.includes(HISTORY_PATH)) {
       setupXHRHistoryInterceptor(this);
@@ -159,8 +168,8 @@ function createRequestContext(bodyStr: string): RequestContext {
   }
 }
 
-function isChatCompletionURL(url: string): boolean {
-  return url.includes(API_PATH);
+function isChatStreamURL(url: string): boolean {
+  return CHAT_STREAM_PATHS.some((path) => url.includes(path));
 }
 
 function hasBypassHookHeader(headers: HeadersInit | undefined): boolean {
@@ -322,12 +331,16 @@ function isFragmentCreationPatch(parsed: any): boolean {
 function getDirectPatchText(parsed: any): string | null {
   if (!parsed?.p && typeof parsed?.v === 'string') return parsed.v;
   if (parsed?.p && parsed.o === 'APPEND' && typeof parsed.v === 'string') return parsed.v;
-  if (parsed?.p && typeof parsed.p === 'string' && parsed.p.endsWith('/content') && typeof parsed.v === 'string' && !parsed.o) {
+  if (isResponseTextPatchPath(parsed?.p) && typeof parsed.v === 'string' && !parsed.o) {
     return parsed.v;
   }
   if (isFragmentCreationPatch(parsed)) {
-    const frag = parsed.v[0];
-    if (frag && typeof frag.content === 'string') return frag.content;
+    const parts: string[] = [];
+    for (const frag of parsed.v) {
+      if (frag && typeof frag.content === 'string') parts.push(frag.content);
+      else if (frag && typeof frag.text === 'string') parts.push(frag.text);
+    }
+    return parts.length > 0 ? parts.join('') : null;
   }
   return null;
 }
@@ -341,12 +354,33 @@ function setDirectPatchText(parsed: any, value: string) {
     parsed.v = value;
     return;
   }
-  if (parsed?.p && typeof parsed.p === 'string' && parsed.p.endsWith('/content') && typeof parsed.v === 'string' && !parsed.o) {
+  if (isResponseTextPatchPath(parsed?.p) && typeof parsed.v === 'string' && !parsed.o) {
     parsed.v = value;
     return;
   }
   if (isFragmentCreationPatch(parsed)) {
-    parsed.v[0].content = value;
+    let remaining = value;
+    for (let i = 0; i < parsed.v.length; i++) {
+      const frag = parsed.v[i];
+      if (!frag) continue;
+      if (typeof frag.content === 'string') {
+        if (i === parsed.v.length - 1) {
+          frag.content = remaining;
+        } else {
+          const portion = remaining.slice(0, frag.content.length);
+          remaining = remaining.slice(frag.content.length);
+          frag.content = portion;
+        }
+      } else if (typeof frag.text === 'string') {
+        if (i === parsed.v.length - 1) {
+          frag.text = remaining;
+        } else {
+          const portion = remaining.slice(0, frag.text.length);
+          remaining = remaining.slice(frag.text.length);
+          frag.text = portion;
+        }
+      }
+    }
   }
 }
 
@@ -378,6 +412,59 @@ function collectAssistantMessageId(parsed: unknown, current: number | null): num
   }
 
   return current;
+}
+
+function createResponseTokenSpeedTracker() {
+  const startedAt = performance.now();
+  let lastEmitAt = 0;
+  let totalTokenUnits = 0;
+  let textLength = 0;
+  let finished = false;
+  let tickTimer: ReturnType<typeof setInterval> | null = null;
+
+  const getAverageTokensPerSecond = (now: number): number => {
+    const elapsedMs = Math.max(now - startedAt, 1);
+    return totalTokenUnits / (elapsedMs / 1000);
+  };
+
+  const emit = (active: boolean, force = false) => {
+    if (finished && active) return;
+
+    const now = performance.now();
+    if (!force && now - lastEmitAt < TOKEN_SPEED_EMIT_INTERVAL_MS) return;
+    lastEmitAt = now;
+
+    const elapsedMs = Math.max(now - startedAt, 1);
+    hookState.onResponseTokenSpeed({
+      active,
+      estimatedTokens: Math.round(totalTokenUnits),
+      tokensPerSecond: getAverageTokensPerSecond(now),
+      elapsedMs: Math.round(elapsedMs),
+      textLength,
+    });
+  };
+
+  emit(true, true);
+  tickTimer = setInterval(() => emit(true, true), TOKEN_SPEED_EMIT_INTERVAL_MS);
+
+  return {
+    append(text: string) {
+      if (!text) return;
+      const tokenUnits = estimateTokenUnits(text);
+      textLength += text.length;
+      totalTokenUnits += tokenUnits;
+      emit(true);
+    },
+    finish() {
+      if (finished) return;
+      finished = true;
+      if (tickTimer !== null) {
+        clearInterval(tickTimer);
+        tickTimer = null;
+      }
+      emit(false, true);
+    },
+  };
 }
 
 function cloneParsedWithTextPrefix(parsed: any, keepChars: number): any | null {
@@ -697,6 +784,7 @@ async function interceptFetchResponse(
   let notifiedCount = 0;
   let textAccBuffer = '';
   let assistantMessageId: number | null = null;
+  const speedTracker = createResponseTokenSpeedTracker();
 
   const processForFullText = (text: string) => {
     textAccBuffer += text;
@@ -712,7 +800,11 @@ async function interceptFetchResponse(
       const eventText = extractTextFromParsed(parsed);
       if (eventText) {
         fullText += eventText;
+        speedTracker.append(eventText);
         notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+      }
+      if (isStreamFinishedFromParsed(parsed)) {
+        speedTracker.finish();
       }
       assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
     }
@@ -720,31 +812,36 @@ async function interceptFetchResponse(
 
   const stream = new ReadableStream({
     async start(controller) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          // Drain any remaining buffered events for fullText
-          if (textAccBuffer.trim()) {
-            const events = parseSSEChunk(textAccBuffer);
-            for (const event of events) {
-              const parsed = parseSSEData(event.data);
-              if (!parsed) continue;
-              const eventText = extractTextFromParsed(parsed);
-              if (eventText) {
-                fullText += eventText;
-                notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            // Drain any remaining buffered events for fullText
+            if (textAccBuffer.trim()) {
+              const events = parseSSEChunk(textAccBuffer);
+              for (const event of events) {
+                const parsed = parseSSEData(event.data);
+                if (!parsed) continue;
+                const eventText = extractTextFromParsed(parsed);
+                if (eventText) {
+                  fullText += eventText;
+                  speedTracker.append(eventText);
+                  notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+                }
+                assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
               }
-              assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
+              textAccBuffer = '';
             }
-            textAccBuffer = '';
+            filter.flush(controller);
+            break;
           }
-          filter.flush(controller);
-          break;
-        }
 
-        const chunk = decoder.decode(value, { stream: true });
-        processForFullText(chunk);
-        filter.processChunk(chunk, controller);
+          const chunk = decoder.decode(value, { stream: true });
+          processForFullText(chunk);
+          filter.processChunk(chunk, controller);
+        }
+      } finally {
+        speedTracker.finish();
       }
 
       // Stream ended — execute any detected tool calls
@@ -764,6 +861,10 @@ async function interceptFetchResponse(
       });
       controller.close();
     },
+    cancel() {
+      speedTracker.finish();
+      reader.cancel().catch(() => {});
+    },
   });
 
   return new Response(stream, {
@@ -774,7 +875,6 @@ async function interceptFetchResponse(
 }
 
 function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: RequestContext) {
-  console.log('[DPP] setupXHRResponseInterceptor called');
   let fullText = '';
   let lastLen = 0;
   let notifiedCount = 0;
@@ -783,11 +883,13 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
   let assistantMessageId: number | null = null;
   const toolDescriptors = hookState.toolDescriptors;
   const filter = new XmlToolStreamFilter(toolDescriptors);
+  const speedTracker = createResponseTokenSpeedTracker();
 
   const finalizeIfNeeded = () => {
     if (completed) return;
     completed = true;
     notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+    speedTracker.finish();
     hookState.onResponseComplete({
       text: fullText,
       chatSessionId: requestContext.chatSessionId,
@@ -821,7 +923,11 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
           const text = extractTextFromParsed(parsed);
           if (text) {
             fullText += text;
+            speedTracker.append(text);
             notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+          }
+          if (isStreamFinishedFromParsed(parsed)) {
+            speedTracker.finish();
           }
           assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
         }
@@ -832,7 +938,6 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
     if (xhr.readyState === 4) {
       filter.flush(fakeController);
       finalizeIfNeeded();
-      console.log('[DPP] XHR done. Filtered len:', filteredResponse.length, 'Original len:', lastLen);
     }
   });
 

@@ -11,10 +11,10 @@ import type {
   ToolDescriptor,
   ToolExecutionRecord,
 } from '../core/types';
-import { DEFAULT_TOOL_DESCRIPTORS } from '../core/tool/invocation';
+import { DEFAULT_TOOL_DESCRIPTORS, createToolInvocationCatalog } from '../core/tool/invocation';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
-import type { ResponseCompletePayload } from '../core/interceptor/fetch-hook';
+import type { ResponseCompletePayload, ResponseTokenSpeedPayload } from '../core/interceptor/fetch-hook';
 import {
   AUTOMATION_BRIDGE_TIMEOUT_MS,
   AUTOMATION_WINDOW_RUN_REQUEST,
@@ -27,6 +27,12 @@ import type { AutomationRunnerRequest, AutomationRunnerResult } from '../core/au
 
 const TOOL_BLOCK_ID = 'dpp-tool-block';
 const TOOL_BLOCK_STYLE_ID = 'dpp-tool-block-css';
+const TOKEN_SPEED_BADGE_ID = 'dpp-token-speed-badge';
+const TOKEN_SPEED_STYLE_ID = 'dpp-token-speed-css';
+const TOKEN_SPEED_BOOTSTRAP_RETRY_MS = 250;
+const TOKEN_SPEED_BOOTSTRAP_RETRY_LIMIT = 40;
+const TOKEN_SPEED_MOUNT_DEBOUNCE_MS = 500;
+const TOKEN_SPEED_ROUTE_CHECK_MS = 500;
 const TOOL_RESTORE_STORAGE_KEY = 'dpp_tool_execution_blocks';
 const THEME_BOOTSTRAP_RETRY_MS = 250;
 const THEME_BOOTSTRAP_RETRY_LIMIT = 20;
@@ -39,6 +45,14 @@ interface PersistedToolBlock extends ToolCallRestoreRecord {
 
 let toolExecutions: ToolExecutionRecord[] = [];
 let toolBlockEl: HTMLElement | null = null;
+let tokenSpeedEl: HTMLElement | null = null;
+let tokenSpeedBootstrapTimer: ReturnType<typeof setTimeout> | null = null;
+let tokenSpeedBootstrapAttempts = 0;
+let tokenSpeedMountObserver: MutationObserver | null = null;
+let tokenSpeedMountTimer: ReturnType<typeof setTimeout> | null = null;
+let lastTokenSpeedProgress: ResponseTokenSpeedPayload = createIdleTokenSpeedProgress();
+let tokenSpeedRouteKey = '';
+let tokenSpeedRouteTimer: ReturnType<typeof setInterval> | null = null;
 const restoredToolRecords = new Map<string, ToolCallRestoreRecord>();
 let restoredRenderTimer: ReturnType<typeof setTimeout> | null = null;
 let restoredRenderAttempts = 0;
@@ -113,6 +127,11 @@ export default defineContentScript({
             void continueManualChatWithToolResults(complete, completedExecutions);
             break;
           }
+          case 'RESPONSE_TOKEN_SPEED': {
+            const progress = normalizeResponseTokenSpeedPayload(event.data.payload);
+            if (progress) updateTokenSpeedIndicator(progress);
+            break;
+          }
         }
       } catch (error) {
         if (isExtensionInvalidatedError(error)) {
@@ -129,6 +148,9 @@ export default defineContentScript({
     });
 
     startDeepSeekThemeSync();
+    startTokenSpeedIndicatorBootstrap();
+    startTokenSpeedIndicatorMountObserver();
+    startTokenSpeedRouteWatcher();
 
     const [memories, skills, activePreset, modelType, toolDescriptors] = await Promise.all([
       sendRuntimeMessage<Memory[]>({ type: 'GET_MEMORIES' }),
@@ -223,6 +245,10 @@ function invalidateExtensionContext() {
     clearTimeout(restoredRenderTimer);
     restoredRenderTimer = null;
   }
+  stopTokenSpeedIndicatorBootstrap();
+  stopTokenSpeedIndicatorMountObserver();
+  stopTokenSpeedRouteWatcher();
+  removeTokenSpeedIndicator();
 }
 
 async function sendRuntimeMessage<T>(message: unknown): Promise<T | undefined> {
@@ -565,6 +591,246 @@ function normalizeResponseCompletePayload(payload: unknown, fallbackText: unknow
   };
 }
 
+function normalizeResponseTokenSpeedPayload(payload: unknown): ResponseTokenSpeedPayload | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const value = payload as Partial<ResponseTokenSpeedPayload>;
+  const estimatedTokens = toFiniteNumber(value.estimatedTokens);
+  const tokensPerSecond = toFiniteNumber(value.tokensPerSecond);
+  const elapsedMs = toFiniteNumber(value.elapsedMs);
+  const textLength = toFiniteNumber(value.textLength);
+
+  if (
+    estimatedTokens === null ||
+    tokensPerSecond === null ||
+    elapsedMs === null ||
+    textLength === null
+  ) {
+    return null;
+  }
+
+  return {
+    active: value.active === true,
+    estimatedTokens,
+    tokensPerSecond,
+    elapsedMs,
+    textLength,
+  };
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function updateTokenSpeedIndicator(progress: ResponseTokenSpeedPayload) {
+  tokenSpeedRouteKey = getTokenSpeedRouteKey();
+  lastTokenSpeedProgress = progress;
+  renderTokenSpeedIndicator(progress);
+}
+
+function createIdleTokenSpeedProgress(): ResponseTokenSpeedPayload {
+  return {
+    active: false,
+    estimatedTokens: 0,
+    tokensPerSecond: 0,
+    elapsedMs: 0,
+    textLength: 0,
+  };
+}
+
+function renderTokenSpeedIndicator(progress: ResponseTokenSpeedPayload): boolean {
+  const badge = ensureTokenSpeedIndicator();
+  if (!badge) return false;
+
+  const speed = formatTokenSpeed(progress.tokensPerSecond);
+  badge.textContent = speed;
+  badge.dataset.active = progress.active ? 'true' : 'false';
+  badge.setAttribute('aria-label', `Token output speed ${speed}`);
+  badge.setAttribute('title', `Token 输出速度：${speed}${progress.active ? '' : '（空闲）'}`);
+  return true;
+}
+
+function formatTokenSpeed(tokensPerSecond: number): string {
+  const safeRate = Number.isFinite(tokensPerSecond) && tokensPerSecond > 0 ? tokensPerSecond : 0;
+  const value = safeRate >= 100 ? String(Math.round(safeRate)) : safeRate.toFixed(1);
+  return `${value} tok/s`;
+}
+
+function startTokenSpeedIndicatorBootstrap() {
+  stopTokenSpeedIndicatorBootstrap();
+  tokenSpeedBootstrapAttempts = 0;
+  scheduleTokenSpeedIndicatorBootstrap();
+}
+
+function stopTokenSpeedIndicatorBootstrap() {
+  if (!tokenSpeedBootstrapTimer) return;
+  clearTimeout(tokenSpeedBootstrapTimer);
+  tokenSpeedBootstrapTimer = null;
+}
+
+function scheduleTokenSpeedIndicatorBootstrap() {
+  if (tokenSpeedBootstrapTimer) return;
+
+  tokenSpeedBootstrapTimer = setTimeout(() => {
+    tokenSpeedBootstrapTimer = null;
+    const rendered = renderTokenSpeedIndicator(lastTokenSpeedProgress);
+    if (rendered) return;
+
+    tokenSpeedBootstrapAttempts += 1;
+    if (tokenSpeedBootstrapAttempts < TOKEN_SPEED_BOOTSTRAP_RETRY_LIMIT) {
+      scheduleTokenSpeedIndicatorBootstrap();
+    }
+  }, tokenSpeedBootstrapAttempts === 0 ? 0 : TOKEN_SPEED_BOOTSTRAP_RETRY_MS);
+}
+
+function startTokenSpeedIndicatorMountObserver() {
+  stopTokenSpeedIndicatorMountObserver();
+  const root = document.getElementById('root') ?? document.body;
+  if (!root) return;
+
+  tokenSpeedMountObserver = new MutationObserver(scheduleTokenSpeedIndicatorMountRefresh);
+  tokenSpeedMountObserver.observe(root, { childList: true, subtree: false });
+  scheduleTokenSpeedIndicatorMountRefresh();
+}
+
+function stopTokenSpeedIndicatorMountObserver() {
+  tokenSpeedMountObserver?.disconnect();
+  tokenSpeedMountObserver = null;
+  if (tokenSpeedMountTimer) {
+    clearTimeout(tokenSpeedMountTimer);
+    tokenSpeedMountTimer = null;
+  }
+}
+
+function scheduleTokenSpeedIndicatorMountRefresh() {
+  if (tokenSpeedMountTimer) return;
+
+  tokenSpeedMountTimer = setTimeout(() => {
+    tokenSpeedMountTimer = null;
+    resetTokenSpeedOnRouteChange();
+    if (isTokenSpeedIndicatorMountedOnCurrentInput()) return;
+    renderTokenSpeedIndicator(lastTokenSpeedProgress);
+  }, TOKEN_SPEED_MOUNT_DEBOUNCE_MS);
+}
+
+function startTokenSpeedRouteWatcher() {
+  stopTokenSpeedRouteWatcher();
+  tokenSpeedRouteKey = getTokenSpeedRouteKey();
+  window.addEventListener('popstate', handleTokenSpeedRouteChange);
+  window.addEventListener('hashchange', handleTokenSpeedRouteChange);
+  tokenSpeedRouteTimer = setInterval(handleTokenSpeedRouteChange, TOKEN_SPEED_ROUTE_CHECK_MS);
+}
+
+function stopTokenSpeedRouteWatcher() {
+  window.removeEventListener('popstate', handleTokenSpeedRouteChange);
+  window.removeEventListener('hashchange', handleTokenSpeedRouteChange);
+  if (tokenSpeedRouteTimer) {
+    clearInterval(tokenSpeedRouteTimer);
+    tokenSpeedRouteTimer = null;
+  }
+}
+
+function handleTokenSpeedRouteChange() {
+  if (resetTokenSpeedOnRouteChange()) {
+    renderTokenSpeedIndicator(lastTokenSpeedProgress);
+  }
+}
+
+function resetTokenSpeedOnRouteChange(): boolean {
+  const nextRouteKey = getTokenSpeedRouteKey();
+  if (nextRouteKey === tokenSpeedRouteKey) return false;
+  tokenSpeedRouteKey = nextRouteKey;
+  lastTokenSpeedProgress = createIdleTokenSpeedProgress();
+  return true;
+}
+
+function getTokenSpeedRouteKey(): string {
+  if (typeof location === 'undefined') return '';
+  return `${location.pathname}${location.search}`;
+}
+
+function isTokenSpeedIndicatorMountedOnCurrentInput(): boolean {
+  const inputBox = findDeepSeekInputBox();
+  return Boolean(inputBox && tokenSpeedEl?.isConnected && tokenSpeedEl.parentElement === inputBox);
+}
+
+function removeTokenSpeedIndicator() {
+  const parent = tokenSpeedEl?.parentElement;
+  tokenSpeedEl?.remove();
+  parent?.removeAttribute('data-dpp-token-speed-anchor');
+  tokenSpeedEl = null;
+}
+
+function ensureTokenSpeedIndicator(): HTMLElement | null {
+  injectTokenSpeedStyles();
+
+  const inputBox = findDeepSeekInputBox();
+  if (!inputBox) return null;
+
+  if (tokenSpeedEl && tokenSpeedEl.isConnected && tokenSpeedEl.parentElement === inputBox) {
+    return tokenSpeedEl;
+  }
+
+  const previousParent = tokenSpeedEl?.parentElement;
+  tokenSpeedEl?.remove();
+  previousParent?.removeAttribute('data-dpp-token-speed-anchor');
+  inputBox.setAttribute('data-dpp-token-speed-anchor', '');
+
+  const badge = document.createElement('div');
+  badge.id = TOKEN_SPEED_BADGE_ID;
+  badge.className = 'dpp-token-speed-badge';
+  badge.setAttribute('role', 'status');
+  badge.setAttribute('aria-live', 'polite');
+  inputBox.appendChild(badge);
+  tokenSpeedEl = badge;
+  return badge;
+}
+
+function injectTokenSpeedStyles() {
+  if (document.getElementById(TOKEN_SPEED_STYLE_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = TOKEN_SPEED_STYLE_ID;
+  style.textContent = `
+    [data-dpp-token-speed-anchor] {
+      position: relative !important;
+    }
+
+    .dpp-token-speed-badge {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      z-index: 30;
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      max-width: 96px;
+      padding: 2px 7px;
+      border: 1px solid rgba(77, 107, 254, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.88);
+      color: #4b5563;
+      font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    body.dpp-theme-dark .dpp-token-speed-badge {
+      border-color: rgba(125, 145, 255, 0.28);
+      background: rgba(22, 26, 36, 0.86);
+      color: #d1d7e6;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+    }
+
+    .dpp-token-speed-badge[data-active='false'] {
+      opacity: 0.72;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 async function continueManualChatWithToolResults(
   complete: ResponseCompletePayload,
   executions: ToolExecutionRecord[],
@@ -708,10 +974,7 @@ function buildToolMarkerRegex(descriptors: ToolDescriptor[]): RegExp {
 }
 
 function buildToolTagPattern(descriptors: ToolDescriptor[]): string {
-  const names = descriptors
-    .map((descriptor) => descriptor.invocationName)
-    .filter(Boolean)
-    .map(escapeRegExp);
+  const names = createToolInvocationCatalog(descriptors).invocationNames.map(escapeRegExp);
   return names.length > 0 ? names.join('|') : 'memory_save|memory_update|memory_delete';
 }
 
@@ -811,6 +1074,15 @@ function rememberRestoredToolRecords(records: ToolCallRestoreRecord[] | undefine
 }
 
 async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
+  if (call.parseError) {
+    return {
+      ok: false,
+      summary: '工具格式错误',
+      detail: call.parseError.message,
+      error: call.parseError,
+    };
+  }
+
   const result = await sendRuntimeMessage<ToolCardResult>({ type: 'EXECUTE_TOOL_CALL', payload: call });
   if (result && typeof result.ok === 'boolean' && typeof result.summary === 'string') {
     return {
@@ -1368,28 +1640,82 @@ function hasVisibleBackground(style: CSSStyleDeclaration): boolean {
          (bgImg !== 'none' && bgImg !== '');
 }
 
+function getPromptTextarea(): HTMLTextAreaElement | null {
+  const textarea = document.querySelector('textarea');
+  return textarea?.tagName === 'TEXTAREA' ? textarea as HTMLTextAreaElement : null;
+}
+
+function findDeepSeekInputBox(): HTMLElement | null {
+  const textarea = getPromptTextarea();
+  if (!textarea) return null;
+
+  const root = document.getElementById('root');
+  const textareaRect = textarea.getBoundingClientRect();
+  let candidate: HTMLElement | null = null;
+  let el: Element | null = textarea.parentElement;
+
+  while (el && el !== root && el !== document.body) {
+    if (el instanceof HTMLElement) {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      if (isTightPromptInputFrame(rect, textareaRect, style)) {
+        return el;
+      }
+
+      if (!candidate && isPromptInputFrameCandidate(rect, textareaRect, style)) {
+        candidate = el;
+      }
+    }
+    el = el.parentElement;
+  }
+
+  return candidate ?? textarea.parentElement;
+}
+
+function isPromptInputFrameCandidate(
+  rect: DOMRect,
+  textareaRect: DOMRect,
+  style: CSSStyleDeclaration,
+): boolean {
+  return rect.width >= textareaRect.width &&
+    rect.height >= textareaRect.height &&
+    rect.height <= Math.max(260, textareaRect.height + 180) &&
+    rect.width <= Math.max(textareaRect.width + 260, textareaRect.width * 1.25) &&
+    (
+      hasVisibleBackground(style) ||
+      Number.parseFloat(style.borderRadius) > 0 ||
+      Number.parseFloat(style.borderTopWidth) > 0 ||
+      Number.parseFloat(style.borderBottomWidth) > 0
+    );
+}
+
+function isTightPromptInputFrame(
+  rect: DOMRect,
+  textareaRect: DOMRect,
+  style: CSSStyleDeclaration,
+): boolean {
+  const borderRadius = Number.parseFloat(style.borderRadius);
+  const hasBorder =
+    Number.parseFloat(style.borderTopWidth) > 0 ||
+    Number.parseFloat(style.borderBottomWidth) > 0;
+
+  return isPromptInputFrameCandidate(rect, textareaRect, style) &&
+    borderRadius >= 12 &&
+    (hasVisibleBackground(style) || hasBorder || style.overflow === 'hidden');
+}
+
 function patchContainerBackgrounds() {
   if (!document.body.classList.contains('dpp-bg-active')) return;
   const root = document.getElementById('root');
   if (!root) return;
 
-  const textarea = document.querySelector('textarea');
+  const textarea = getPromptTextarea();
   if (!textarea) return;
 
-  let inputBox: Element | null = null;
-  let el: Element | null = textarea.parentElement;
-  while (el && el !== root) {
-    const bg = getComputedStyle(el).backgroundColor;
-    if (bg === 'rgb(255, 255, 255)' || bg === 'rgb(249, 250, 251)') {
-      inputBox = el;
-      break;
-    }
-    el = el.parentElement;
-  }
-
+  const inputBox = findDeepSeekInputBox();
   if (!inputBox) return;
 
-  el = inputBox.parentElement;
+  let el = inputBox.parentElement;
   while (el && el !== root && el !== document.body) {
     const style = getComputedStyle(el);
     if (hasVisibleBackground(style)) {
