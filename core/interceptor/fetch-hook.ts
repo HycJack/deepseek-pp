@@ -1,4 +1,4 @@
-import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL } from '../constants';
+import { DEEPSEEK_API_URL, DPP_MANAGED_AGENT_PROMPT_MARKER, PRESET_REINJECTION_INTERVAL } from '../constants';
 import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord, ToolDescriptor } from '../types';
 import { buildPromptAugmentation } from '../prompt';
 import { parseSkillCommand } from '../skill/parser';
@@ -11,7 +11,7 @@ import {
   type ToolInvocationCatalog,
 } from '../tool';
 import { estimateTokenUnits } from '../token/estimator';
-import { extractTextFromParsed, isResponseTextPatchPath, isStreamFinishedFromParsed, parseSSEChunk, parseSSEData } from './sse-parser';
+import { extractTextFromParsed, isResponseTextPatchPath, isStreamFinishedFromParsed, isThinkingPatchPath, parseSSEChunk, parseSSEData } from './sse-parser';
 import { extractToolCalls, stripToolCalls } from './tool-parser';
 
 const COMPLETION_PATH = new URL(DEEPSEEK_API_URL).pathname;
@@ -65,6 +65,8 @@ export function installFetchHook() {
 
 export interface ResponseCompletePayload {
   text: string;
+  originalPrompt: string;
+  agentTaskPrompt: string;
   chatSessionId: string | null;
   parentMessageId: number | null;
   assistantMessageId: number | null;
@@ -85,9 +87,21 @@ export interface ResponseTokenSpeedPayload {
 }
 
 interface RequestContext {
+  originalPrompt: string;
+  agentTaskPrompt: string;
   chatSessionId: string | null;
   parentMessageId: number | null;
   promptOptions: ResponseCompletePayload['promptOptions'];
+}
+
+interface RequestContextOverrides {
+  originalPrompt?: string;
+  agentTaskPrompt?: string;
+}
+
+interface RequestBodyModification {
+  body: string;
+  agentTaskPrompt: string;
 }
 
 function hookFetch() {
@@ -108,10 +122,14 @@ function hookFetch() {
       return originalFetch.call(this, input, { ...init, headers: stripBypassHookHeader(init.headers) });
     }
 
+    const originalContext = createRequestContext(init.body);
     const modified = modifyRequestBody(init.body);
-    const requestBody = modified ?? init.body;
-    const requestContext = createRequestContext(requestBody);
-    const requestInit = modified ? { ...init, body: modified } : init;
+    const requestBody = modified?.body ?? init.body;
+    const requestContext = createRequestContext(requestBody, {
+      originalPrompt: originalContext.originalPrompt,
+      agentTaskPrompt: modified?.agentTaskPrompt ?? originalContext.agentTaskPrompt,
+    });
+    const requestInit = modified ? { ...init, body: modified.body } : init;
     return interceptFetchResponse(originalFetch.call(this, input, requestInit), requestContext);
   };
 }
@@ -129,9 +147,13 @@ function hookXHR() {
   XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null) {
     const url = xhrUrls.get(this);
     if (url && isChatStreamURL(url) && typeof body === 'string') {
+      const originalContext = createRequestContext(body);
       const modified = modifyRequestBody(body);
-      const requestBody = modified ?? body;
-      setupXHRResponseInterceptor(this, createRequestContext(requestBody));
+      const requestBody = modified?.body ?? body;
+      setupXHRResponseInterceptor(this, createRequestContext(requestBody, {
+        originalPrompt: originalContext.originalPrompt,
+        agentTaskPrompt: modified?.agentTaskPrompt ?? originalContext.agentTaskPrompt,
+      }));
       return origSend.call(this, requestBody);
     }
     if (url && url.includes(HISTORY_PATH)) {
@@ -141,10 +163,18 @@ function hookXHR() {
   };
 }
 
-function createRequestContext(bodyStr: string): RequestContext {
+function createRequestContext(bodyStr: string, overrides: RequestContextOverrides = {}): RequestContext {
   try {
     const body = JSON.parse(bodyStr) as Record<string, unknown>;
+    const bodyPrompt = typeof body.prompt === 'string' ? body.prompt : '';
+    const originalPrompt = typeof overrides.originalPrompt === 'string'
+      ? overrides.originalPrompt
+      : typeof body.prompt === 'string'
+        ? body.prompt
+        : '';
     return {
+      originalPrompt,
+      agentTaskPrompt: overrides.agentTaskPrompt ?? bodyPrompt,
       chatSessionId: typeof body.chat_session_id === 'string' ? body.chat_session_id : null,
       parentMessageId: normalizeMessageId(body.parent_message_id),
       promptOptions: {
@@ -156,6 +186,8 @@ function createRequestContext(bodyStr: string): RequestContext {
     };
   } catch {
     return {
+      originalPrompt: overrides.originalPrompt ?? '',
+      agentTaskPrompt: overrides.agentTaskPrompt ?? overrides.originalPrompt ?? '',
       chatSessionId: null,
       parentMessageId: null,
       promptOptions: {
@@ -193,7 +225,7 @@ function normalizeMessageId(value: unknown): number | null {
   return null;
 }
 
-function modifyRequestBody(bodyStr: string): string | null {
+function modifyRequestBody(bodyStr: string): RequestBodyModification | null {
   let body: Record<string, unknown>;
   try {
     body = JSON.parse(bodyStr);
@@ -205,6 +237,7 @@ function modifyRequestBody(bodyStr: string): string | null {
   if (!originalPrompt) return null;
 
   const thinkingEnabled = body.thinking_enabled === true;
+  const effectiveToolDescriptors = thinkingEnabled ? [] : hookState.toolDescriptors;
   const isFirstMessage = body.parent_message_id === null || body.parent_message_id === undefined;
 
   if (isFirstMessage) {
@@ -234,7 +267,7 @@ function modifyRequestBody(bodyStr: string): string | null {
           memories: hookState.memories,
           thinkingEnabled,
           presetContent,
-          toolDescriptors: hookState.toolDescriptors,
+          toolDescriptors: effectiveToolDescriptors,
         });
         prompt = augmented;
       } else if (hookState.memories.length > 0) {
@@ -243,7 +276,7 @@ function modifyRequestBody(bodyStr: string): string | null {
           thinkingEnabled,
           identityOnly: true,
           presetContent,
-          toolDescriptors: hookState.toolDescriptors,
+          toolDescriptors: effectiveToolDescriptors,
         });
         prompt = augmented;
       } else if (presetContent) {
@@ -251,7 +284,7 @@ function modifyRequestBody(bodyStr: string): string | null {
       }
 
       body.prompt = prompt;
-      return JSON.stringify(body);
+      return { body: JSON.stringify(body), agentTaskPrompt: resolved.combinedPrompt };
     }
   }
 
@@ -259,7 +292,7 @@ function modifyRequestBody(bodyStr: string): string | null {
     memories: hookState.memories,
     thinkingEnabled,
     presetContent,
-    toolDescriptors: hookState.toolDescriptors,
+    toolDescriptors: effectiveToolDescriptors,
   });
   body.prompt = augmented;
 
@@ -267,7 +300,15 @@ function modifyRequestBody(bodyStr: string): string | null {
     hookState.onMemoriesUsed(usedMemoryIds);
   }
 
-  return JSON.stringify(body);
+  return { body: JSON.stringify(body), agentTaskPrompt: originalPrompt };
+}
+
+function hasExecutableMcpTools(descriptors: readonly ToolDescriptor[]): boolean {
+  return descriptors.some((descriptor) =>
+    descriptor.provider.kind === 'mcp' &&
+    descriptor.execution.enabled &&
+    descriptor.execution.mode !== 'disabled'
+  );
 }
 
 interface ResolvedSkills {
@@ -802,6 +843,8 @@ async function interceptFetchResponse(
         fullText += eventText;
         speedTracker.append(eventText);
         notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+      } else if (isThinkingPatchPath((parsed as any)?.p) && typeof (parsed as any)?.v === 'string') {
+        speedTracker.append((parsed as any).v);
       }
       if (isStreamFinishedFromParsed(parsed)) {
         speedTracker.finish();
@@ -809,6 +852,8 @@ async function interceptFetchResponse(
       assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
     }
   };
+
+  let cancelled = false;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -827,6 +872,8 @@ async function interceptFetchResponse(
                   fullText += eventText;
                   speedTracker.append(eventText);
                   notifiedCount = notifyNewToolCalls(fullText, notifiedCount, toolDescriptors);
+                } else if (isThinkingPatchPath((parsed as any)?.p) && typeof (parsed as any)?.v === 'string') {
+                  speedTracker.append((parsed as any).v);
                 }
                 assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
               }
@@ -844,24 +891,35 @@ async function interceptFetchResponse(
         speedTracker.finish();
       }
 
-      // Stream ended — execute any detected tool calls
-      const calls = extractToolCalls(fullText, { descriptors: toolDescriptors });
-      if (calls.length > 0) {
-        for (const call of calls.slice(notifiedCount)) {
-          await hookState.onToolCallExecuted(call);
-        }
-      }
+      if (cancelled) return;
 
-      hookState.onResponseComplete({
-        text: fullText,
-        chatSessionId: requestContext.chatSessionId,
-        parentMessageId: requestContext.parentMessageId,
-        assistantMessageId,
-        promptOptions: requestContext.promptOptions,
-      });
-      controller.close();
+      // Stream ended — execute any detected tool calls
+      try {
+        const calls = extractToolCalls(fullText, { descriptors: toolDescriptors });
+        if (calls.length > 0) {
+          for (const call of calls.slice(notifiedCount)) {
+            if (cancelled) break;
+            await hookState.onToolCallExecuted(call);
+          }
+        }
+
+        if (!cancelled) {
+          hookState.onResponseComplete({
+            text: fullText,
+            originalPrompt: requestContext.originalPrompt,
+            agentTaskPrompt: requestContext.agentTaskPrompt,
+            chatSessionId: requestContext.chatSessionId,
+            parentMessageId: requestContext.parentMessageId,
+            assistantMessageId,
+            promptOptions: requestContext.promptOptions,
+          });
+        }
+      } finally {
+        if (!cancelled) controller.close();
+      }
     },
     cancel() {
+      cancelled = true;
       speedTracker.finish();
       reader.cancel().catch(() => {});
     },
@@ -892,6 +950,8 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
     speedTracker.finish();
     hookState.onResponseComplete({
       text: fullText,
+      originalPrompt: requestContext.originalPrompt,
+      agentTaskPrompt: requestContext.agentTaskPrompt,
       chatSessionId: requestContext.chatSessionId,
       parentMessageId: requestContext.parentMessageId,
       assistantMessageId,
@@ -1061,8 +1121,12 @@ function stripToolCallsFromHistory(json: any) {
   if (!Array.isArray(messages)) return;
 
   const restoredRecords: ToolCallRestoreRecord[] = [];
+  const visibleMessages = messages.filter((msg: any) => !isInternalManagedAgentMessage(msg));
+  if (visibleMessages.length !== messages.length) {
+    data.chat_messages = visibleMessages;
+  }
 
-  messages.forEach((msg, index) => {
+  visibleMessages.forEach((msg: any, index: number) => {
     const messageKey = getMessageRestoreKey(msg, index);
     if (typeof msg.content === 'string' && hasToolCallMarker(msg.content)) {
       const record = collectToolCallRestoreRecord(msg.content, `${messageKey}:content`);
@@ -1083,6 +1147,22 @@ function stripToolCallsFromHistory(json: any) {
   if (restoredRecords.length > 0) {
     hookState.onToolCallsRestored(restoredRecords);
   }
+}
+
+function isInternalManagedAgentMessage(msg: any): boolean {
+  if (!msg || typeof msg !== 'object') return false;
+  if (typeof msg.content === 'string' && isInternalManagedAgentContent(msg.content)) return true;
+  if (!Array.isArray(msg.fragments)) return false;
+  return msg.fragments.some((frag: any) => typeof frag?.content === 'string' && isInternalManagedAgentContent(frag.content));
+}
+
+function isInternalManagedAgentContent(content: string): boolean {
+  if (content.includes(DPP_MANAGED_AGENT_PROMPT_MARKER)) return true;
+  if (content.includes('DeepSeek++ 托管 Agent Runner') && content.includes('<tool_results>')) return true;
+  return content.includes('Tool call format reminder:') &&
+    content.includes('Available tool tag names:') &&
+    content.includes('<original_user_task>') &&
+    content.includes('</original_user_task>');
 }
 
 // --- IndexedDB interception: strip tool-call blocks from cached messages ---
@@ -1148,7 +1228,12 @@ function stripSingleIDBRecord(record: any, restoredRecords: ToolCallRestoreRecor
   const messages = data.chat_messages;
   if (!Array.isArray(messages)) return;
 
-  messages.forEach((msg: any, index: number) => {
+  const visibleMessages = messages.filter((msg: any) => !isInternalManagedAgentMessage(msg));
+  if (visibleMessages.length !== messages.length) {
+    data.chat_messages = visibleMessages;
+  }
+
+  visibleMessages.forEach((msg: any, index: number) => {
     const messageKey = getMessageRestoreKey(msg, index);
     if (typeof msg.content === 'string' && hasToolCallMarker(msg.content)) {
       const record = collectToolCallRestoreRecord(msg.content, `${messageKey}:content`);

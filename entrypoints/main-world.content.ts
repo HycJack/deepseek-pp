@@ -1,4 +1,9 @@
-import { installFetchHook, updateHookState, type ResponseCompletePayload } from '../core/interceptor/fetch-hook';
+import {
+  installFetchHook,
+  updateHookState,
+  type ResponseCompletePayload,
+  type ResponseTokenSpeedPayload,
+} from '../core/interceptor/fetch-hook';
 import { initSkillPopup } from '../core/ui/skill-popup';
 import type {
   Memory,
@@ -11,13 +16,14 @@ import type {
   ToolResult,
 } from '../core/types';
 import {
-  AUTOMATION_WINDOW_RUN_RESULT,
+  AGENT_WINDOW_RUN_RESULT,
+  AGENT_BRIDGE_TIMEOUT_MS,
   MAIN_WORLD_WINDOW_SOURCE,
-  createAutomationRunnerFailure,
-  isAutomationWindowRunRequestMessage,
-} from '../core/automation/messages';
-import { runDeepSeekAutomation } from '../core/automation/runner';
-import type { AutomationRunnerRequest, AutomationRunnerResult } from '../core/automation/types';
+  createAgentRunFailure,
+  isAgentWindowRunRequestMessage,
+} from '../core/agent/messages';
+import { runDeepSeekAgentRun } from '../core/agent/deepseek-runner';
+import type { AgentRunRequest, AgentRunResult } from '../core/agent/types';
 
 export default defineContentScript({
   matches: ['*://chat.deepseek.com/*'],
@@ -37,9 +43,14 @@ export default defineContentScript({
       async onToolCallExecuted(call: ToolCall) {
         return new Promise((resolve) => {
           const id = Math.random().toString(36).slice(2);
+          const timeout = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            resolve({ ok: false, summary: 'Tool execution timed out (bridge timeout)' });
+          }, AGENT_BRIDGE_TIMEOUT_MS);
           const handler = (event: MessageEvent) => {
             if (event.data?.source !== 'deepseek-pp-content') return;
             if (event.data.type !== 'TOOL_CALL_RESULT' || event.data.id !== id) return;
+            clearTimeout(timeout);
             window.removeEventListener('message', handler);
             resolve(event.data.result);
           };
@@ -66,6 +77,13 @@ export default defineContentScript({
           payload: complete,
         });
       },
+      onResponseTokenSpeed(progress: ResponseTokenSpeedPayload) {
+        window.postMessage({
+          source: 'deepseek-pp-main',
+          type: 'RESPONSE_TOKEN_SPEED',
+          payload: progress,
+        });
+      },
       onMemoriesUsed(ids: number[]) {
         window.postMessage({
           source: 'deepseek-pp-main',
@@ -76,10 +94,11 @@ export default defineContentScript({
     });
 
     window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data?.source !== 'deepseek-pp-content') return;
 
-      if (isAutomationWindowRunRequestMessage(event.data)) {
-        void handleAutomationRunRequest(event.data.id, event.data.payload);
+      if (isAgentWindowRunRequestMessage(event.data)) {
+        void handleAgentRunRequest(event.data.id, event.data.payload);
         return;
       }
 
@@ -105,11 +124,11 @@ export default defineContentScript({
   },
 });
 
-async function handleAutomationRunRequest(id: string, request: AutomationRunnerRequest) {
-  const result = await runAutomationInMainWorld(request).catch((err): AutomationRunnerResult =>
-    createAutomationRunnerFailure(
+async function handleAgentRunRequest(id: string, request: AgentRunRequest) {
+  const result = await runAgentInMainWorld(request).catch((err): AgentRunResult =>
+    createAgentRunFailure(
       request,
-      'automation_main_world_failed',
+      'agent_main_world_failed',
       err instanceof Error ? err.message : String(err),
       'runner',
       true,
@@ -118,15 +137,17 @@ async function handleAutomationRunRequest(id: string, request: AutomationRunnerR
 
   window.postMessage({
     source: MAIN_WORLD_WINDOW_SOURCE,
-    type: AUTOMATION_WINDOW_RUN_RESULT,
+    type: AGENT_WINDOW_RUN_RESULT,
     id,
     result,
   });
 }
 
-async function handleManualToolContinuation(id: string, request: AutomationRunnerRequest) {
-  const result = await runDeepSeekAutomation(request).catch((err): AutomationRunnerResult =>
-    createAutomationRunnerFailure(
+async function handleManualToolContinuation(id: string, request: AgentRunRequest) {
+  const result = await runDeepSeekAgentRun(request, {
+    executeToolCall: executeToolCallViaContent,
+  }).catch((err): AgentRunResult =>
+    createAgentRunFailure(
       request,
       'manual_tool_continuation_failed',
       err instanceof Error ? err.message : String(err),
@@ -143,8 +164,8 @@ async function handleManualToolContinuation(id: string, request: AutomationRunne
   });
 }
 
-async function runAutomationInMainWorld(request: AutomationRunnerRequest): Promise<AutomationRunnerResult> {
-  return runDeepSeekAutomation(request, {
+async function runAgentInMainWorld(request: AgentRunRequest): Promise<AgentRunResult> {
+  return runDeepSeekAgentRun(request, {
     executeToolCall: executeToolCallViaContent,
   });
 }
@@ -152,9 +173,14 @@ async function runAutomationInMainWorld(request: AutomationRunnerRequest): Promi
 function executeToolCallViaContent(call: ToolCall): Promise<ToolResult> {
   return new Promise((resolve) => {
     const id = Math.random().toString(36).slice(2);
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', handler);
+      resolve({ ok: false, summary: 'Tool execution timed out (bridge timeout)' });
+    }, AGENT_BRIDGE_TIMEOUT_MS);
     const handler = (event: MessageEvent) => {
       if (event.data?.source !== 'deepseek-pp-content') return;
       if (event.data.type !== 'TOOL_CALL_RESULT' || event.data.id !== id) return;
+      clearTimeout(timeout);
       window.removeEventListener('message', handler);
       resolve(event.data.result as ToolResult);
     };

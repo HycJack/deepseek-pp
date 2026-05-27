@@ -1,6 +1,12 @@
 import { SYSTEM_TEMPLATE_CHAT, SYSTEM_TEMPLATE_THINKING } from '../constants';
 import type { Memory, ToolDescriptor } from '../types';
-import { DEFAULT_TOOL_DESCRIPTORS } from '../tool';
+import {
+  DEFAULT_TOOL_DESCRIPTORS,
+  createToolInvocationCatalog,
+  getPreferredToolInvocationName,
+  getToolInvocationNames,
+  type ToolInvocationCatalog,
+} from '../tool';
 import { estimateTokens, formatMemoriesBlock, getMemoryBudget, selectMemories } from '../memory/selector';
 
 export interface PromptAugmentationOptions {
@@ -49,28 +55,34 @@ export function buildPromptAugmentation(
 }
 
 export function renderToolSchemas(descriptors: readonly ToolDescriptor[] = DEFAULT_TOOL_DESCRIPTORS): string {
+  const catalog = createToolInvocationCatalog(descriptors);
   return descriptors
-    .map(renderToolSchema)
+    .map((descriptor) => renderToolSchema(descriptor, catalog))
     .join('\n\n');
 }
 
-function renderToolSchema(descriptor: ToolDescriptor): string {
+function renderToolSchema(descriptor: ToolDescriptor, catalog: ToolInvocationCatalog): string {
   const examplePayload = createExamplePayload(descriptor);
-  return [
-    `### Tool ${descriptor.invocationName}`,
+  const preferredName = getPreferredToolInvocationName(descriptor, catalog);
+  const acceptedNames = getToolInvocationNames(descriptor, catalog);
+  const lines = [
+    `### Tool ${preferredName}`,
     `Title: ${descriptor.title}`,
     `Description: ${descriptor.description}`,
-    `Valid call format for ${descriptor.invocationName}:`,
-    `<${descriptor.invocationName}>`,
+    acceptedNames.length > 1 ? `Accepted tag names: ${acceptedNames.join(', ')}` : '',
+    `Valid call format for ${preferredName}:`,
+    `<${preferredName}>`,
     JSON.stringify(examplePayload, null, 2),
-    `</${descriptor.invocationName}>`,
-    `Invalid formats: <invoke name="${descriptor.invocationName}">...</invoke>, <tool_call>...</tool_call>`,
+    `</${preferredName}>`,
+    `Invalid formats: <invoke name="${preferredName}">...</invoke>, <tool_call>...</tool_call>`,
     `Parameters JSON Schema: ${JSON.stringify(descriptor.inputSchema)}`,
-  ].join('\n');
+  ];
+  return lines.filter(Boolean).join('\n');
 }
 
 function renderToolFormatReminder(descriptors: readonly ToolDescriptor[]): string {
-  const names = descriptors.map((descriptor) => descriptor.invocationName).filter(Boolean);
+  const catalog = createToolInvocationCatalog(descriptors);
+  const names = catalog.invocationNames;
   if (names.length === 0) return '';
   return [
     '',
@@ -78,8 +90,12 @@ function renderToolFormatReminder(descriptors: readonly ToolDescriptor[]): strin
     '---',
     'Tool call format reminder:',
     `Available tool tag names: ${names.join(', ')}`,
+    'These listed tools are executable by the extension. Do not claim you cannot call a listed MCP tool.',
     'To call a tool, use ONLY the direct XML tag whose name is the tool name, with valid JSON as the body.',
-    'Do not use <invoke name="...">, <tool_call>, Markdown code fences, or any wrapper format.',
+    'For MCP tools, prefer the short tag name when it appears in the available names list.',
+    'For local file paths, use forward slashes or escaped backslashes so the JSON body remains valid.',
+    'Do not use <invoke name="...">, <tool_call>, Markdown code fences, {"tool":"...","arguments":{...}}, or any wrapper format.',
+    'Do not put executable tool XML in a thinking/reasoning section; put it in the final assistant answer content.',
   ].join('\n');
 }
 
@@ -112,7 +128,15 @@ function exampleValue(schema: unknown): unknown {
     case 'object':
       return {};
     case 'string':
-    default:
+    default: {
+      const desc = typeof value.description === 'string' ? value.description.toLowerCase() : '';
+      if (type === 'string' && (desc.includes('file path') || desc.includes('file_path') || desc.includes('filepath'))) {
+        if (desc.includes('.pptx')) return './example.pptx';
+        if (desc.includes('.docx')) return './example.docx';
+        if (desc.includes('.xlsx')) return './example.xlsx';
+        return './example.txt';
+      }
       return 'value';
+    }
   }
 }
