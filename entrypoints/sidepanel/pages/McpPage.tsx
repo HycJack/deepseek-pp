@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  OFFICECLI_MCP_ENDPOINT,
-  OFFICECLI_MCP_SERVER_NAME,
-  createOfficeCliMcpPresetInput,
-} from '../../../core/officecli';
+  SHELL_MCP_NATIVE_HOST,
+  SHELL_MCP_SERVER_NAME,
+  createShellMcpPresetInput,
+} from '../../../core/shell';
 import type {
   McpHeaderValue,
   McpSecretValue,
@@ -162,28 +162,28 @@ export default function McpPage() {
     setShowForm((prev) => !prev);
   };
 
-  const createOfficeCliPreset = async () => {
+  const createShellPreset = async () => {
     setMessage('');
     const existing = servers.find((server) =>
-      server.displayName === OFFICECLI_MCP_SERVER_NAME ||
-      server.transport.url === OFFICECLI_MCP_ENDPOINT
+      server.displayName === SHELL_MCP_SERVER_NAME ||
+      server.transport.nativeHost === SHELL_MCP_NATIVE_HOST
     );
     if (existing) {
       setSelectedId(existing.id);
-      setMessage('OfficeCLI MCP 已存在，已选中现有配置');
+      setMessage('Shell MCP 已存在，已选中现有配置');
       return;
     }
 
     const server: McpServerConfig | null = await chrome.runtime.sendMessage({
       type: 'CREATE_MCP_SERVER',
-      payload: createOfficeCliMcpPresetInput(),
+      payload: createShellMcpPresetInput(),
     });
     if (!server) {
-      setMessage('创建 OfficeCLI MCP 预设失败');
+      setMessage('创建 Shell MCP 预设失败');
       return;
     }
     setSelectedId(server.id);
-    setMessage(`已创建 OfficeCLI MCP 预设。启动本地 provider 后点击「测试」：npm run officecli:mcp -- --root <文档目录>`);
+    setMessage(`已创建 Shell MCP 预设。请在插件源码目录下运行安装命令（见下方提示）。`);
     await load();
   };
 
@@ -293,10 +293,10 @@ export default function McpPage() {
         </div>
         <div className="flex items-center gap-1.5">
           <button
-            onClick={createOfficeCliPreset}
+            onClick={createShellPreset}
             className="ds-btn-secondary px-3 py-1.5 text-xs rounded-lg transition-all duration-150"
           >
-            OfficeCLI
+            Shell
           </button>
           <button
             onClick={startCreate}
@@ -783,8 +783,8 @@ function ServerDetail({
         </div>
       )}
 
-      {isOfficeCliServer(server) && (
-        <OfficeCliSetupHint server={server} cache={cache} />
+      {isShellServer(server) && (
+        <ShellSetupHint server={server} cache={cache} />
       )}
 
       <div className="ds-card rounded-lg p-3 space-y-2">
@@ -1177,50 +1177,95 @@ function statusMeta(status: McpServerStatus) {
   return { label: 'unknown', color: 'var(--ds-text-secondary)', bg: 'var(--ds-surface)' };
 }
 
-function isOfficeCliServer(server: McpServerConfig): boolean {
-  return server.displayName === OFFICECLI_MCP_SERVER_NAME || server.transport.url === OFFICECLI_MCP_ENDPOINT;
+function isShellServer(server: McpServerConfig): boolean {
+  return server.displayName === SHELL_MCP_SERVER_NAME || server.transport.nativeHost === SHELL_MCP_NATIVE_HOST;
 }
 
-function OfficeCliSetupHint({ server, cache }: { server: McpServerConfig; cache: McpToolCacheEntry | null }) {
-  const message = officeCliSetupMessage(server, cache);
+function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: McpToolCacheEntry | null }) {
+  const { message, isError } = shellSetupMessage(server, cache);
+  const setup = shellInstallCommand();
   return (
     <div className="ds-card rounded-lg px-3 py-2 text-[11px] leading-4" style={{ color: 'var(--ds-text-secondary)' }}>
-      <div className="font-medium mb-1" style={{ color: 'var(--ds-text)' }}>OfficeCLI 本地 provider</div>
-      <div>{message}</div>
-      <div className="mt-1 font-mono break-all" style={{ color: 'var(--ds-text-tertiary)' }}>
-        npm run officecli:mcp -- --root &lt;文档目录&gt;
+      <div className="font-medium mb-1" style={{ color: 'var(--ds-text)' }}>Shell Native Host</div>
+      {isError ? (
+        <div className="rounded px-2 py-1 mb-1.5" style={{ color: 'var(--ds-danger)', background: 'var(--ds-danger-bg)', border: '1px solid var(--ds-danger)' }}>
+          {message}
+        </div>
+      ) : (
+        <div>{message}</div>
+      )}
+      <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
+        打开终端，在插件源码目录下执行以下命令（只需一次）：
+      </div>
+      <div className="mt-1 font-mono break-all select-all rounded px-2 py-1" style={{ color: 'var(--ds-text)', background: 'var(--ds-surface)' }}>
+        {setup.command}
       </div>
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
-        默认只自动注入状态、读取、问题检查、验证和预览工具；创建和批量修改工具需要 provider 启用写入并在工具列表中手动放行。
+        {setup.usesExtensionId
+          ? `已自动检测 ${browserLabel(setup.browser)} 扩展 ID。安装需要本机已安装 Node.js。`
+          : 'Firefox 使用固定扩展 ID，不需要额外填写 extension id。安装需要本机已安装 Node.js。'}
+      </div>
+      <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
+        {!server.enabled
+          ? '安装完成后，打开上方开关启用此服务，再点击「测试」验证连接。'
+          : '安装完成后重启浏览器，回到这里点击「测试」验证连接。'}
       </div>
     </div>
   );
 }
 
-function officeCliSetupMessage(server: McpServerConfig, cache: McpToolCacheEntry | null): string {
+type NativeHostBrowser = 'chrome' | 'edge' | 'firefox';
+
+function shellInstallCommand(): { browser: NativeHostBrowser; command: string; usesExtensionId: boolean } {
+  const browser = currentNativeHostBrowser();
+  const base = `npm run shell:install -- --browser ${browser}`;
+  if (browser === 'firefox') {
+    return { browser, command: base, usesExtensionId: false };
+  }
+
+  return {
+    browser,
+    command: `${base} --extension-id ${chrome.runtime.id || '<扩展ID>'}`,
+    usesExtensionId: true,
+  };
+}
+
+function currentNativeHostBrowser(): NativeHostBrowser {
+  const ua = navigator.userAgent;
+  if (/\bFirefox\//.test(ua)) return 'firefox';
+  if (/\bEdg\//.test(ua)) return 'edge';
+  return 'chrome';
+}
+
+function browserLabel(browser: NativeHostBrowser): string {
+  if (browser === 'edge') return 'Edge';
+  if (browser === 'firefox') return 'Firefox';
+  return 'Chrome';
+}
+
+function shellSetupMessage(server: McpServerConfig, cache: McpToolCacheEntry | null): { message: string; isError: boolean } {
   const error = `${cache?.health.error ?? ''} ${server.lastError ?? ''}`.toLowerCase();
-  if (error.includes('officecli_binary_missing') || error.includes('not found') || error.includes('enoent')) {
-    return '未找到 officecli，请先安装 OfficeCLI，或启动 provider 时用 --officecli 指定二进制路径。';
+  if (error.includes('native_host_unavailable') || error.includes('native messaging host not found') || error.includes('not found') || error.includes('specified native messaging host')) {
+    return { message: '未找到 Native Host — 请先运行下方安装命令，并确保已安装 Node.js。', isError: true };
   }
-  if (error.includes('officecli_path_denied') || error.includes('outside the configured')) {
-    return '文件路径不在允许根目录下，请用 --root 指定包含目标文档的目录后重启 provider。';
-  }
-  if (error.includes('officecli_write_disabled')) {
-    return '写入工具仍处于禁用状态；确认需要创建或修改文档后，用 --write enabled 重启 provider。';
+  if (error.includes('native_messaging_unavailable')) {
+    return { message: '当前浏览器不支持 Native Messaging，请使用 Chrome、Edge 或 Firefox。', isError: true };
   }
   if (
     error.includes('failed to fetch') ||
     error.includes('mcp_network_error') ||
-    error.includes('cannot reach mcp server') ||
-    error.includes('couldn') ||
+    error.includes('cannot reach') ||
     error.includes('connection refused')
   ) {
-    return `本地 OfficeCLI provider 没有响应。请先在仓库目录启动：npm run officecli:mcp -- --root <文档目录>，然后回到这里点「测试」。`;
+    return { message: '无法连接到 Native Host — 请确认已运行安装脚本并重启浏览器。', isError: true };
   }
   if (cache?.health.status === 'ready') {
-    return `已连接到 ${server.transport.url ?? OFFICECLI_MCP_ENDPOINT}，发现 ${cache.health.toolCount} 个 OfficeCLI 工具。`;
+    return { message: `已连接，发现 ${cache.health.toolCount} 个工具。`, isError: false };
   }
-  return `先在本机启动 OfficeCLI provider，再授权并测试 ${server.transport.url ?? OFFICECLI_MCP_ENDPOINT}。`;
+  if (!server.enabled) {
+    return { message: '服务已创建但尚未启用。请先安装 Native Host，再启用并测试。', isError: false };
+  }
+  return { message: '请先安装 Native Host，再点击「测试」验证连接。', isError: false };
 }
 
 function transportLabel(kind: McpTransportKind): string {

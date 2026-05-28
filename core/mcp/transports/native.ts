@@ -20,6 +20,64 @@ interface McpNativeEnvelope {
   message: McpJsonRpcRequest<any> | McpJsonRpcNotification;
 }
 
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (reason: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+interface NativePortState {
+  port: chrome.runtime.Port;
+  pendingRequests: Map<number | string, PendingRequest>;
+}
+
+const nativePortStates = new Map<string, NativePortState>();
+
+function getPortState(nativeHost: string): NativePortState {
+  const existing = nativePortStates.get(nativeHost);
+  if (existing) return existing;
+
+  if (!chrome.runtime?.connectNative) {
+    throw new McpTransportError('mcp_native_messaging_unavailable', 'Browser native messaging is unavailable.', {
+      retryable: false,
+    });
+  }
+
+  const port = chrome.runtime.connectNative(nativeHost);
+  const state: NativePortState = {
+    port,
+    pendingRequests: new Map(),
+  };
+  nativePortStates.set(nativeHost, state);
+
+  port.onMessage.addListener((response: any) => {
+    const id = response?.id ?? response?.result?.id;
+    const rpcId = response?.jsonrpc === '2.0' ? response.id : id;
+    if (rpcId != null && state.pendingRequests.has(rpcId)) {
+      const pending = state.pendingRequests.get(rpcId)!;
+      state.pendingRequests.delete(rpcId);
+      clearTimeout(pending.timer);
+      pending.resolve(response);
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    const err = new McpTransportError(
+      'mcp_native_host_disconnected',
+      chrome.runtime.lastError?.message || 'Native host disconnected.',
+      { retryable: true },
+    );
+    for (const pending of state.pendingRequests.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(err);
+    }
+    state.pendingRequests.clear();
+    nativePortStates.delete(nativeHost);
+  });
+
+  return state;
+}
+
 export function createMcpNativeMessagingTransport(server: McpServerConfig): McpProtocolTransport {
   return {
     request(request, options) {
@@ -42,30 +100,50 @@ async function sendNativeMessage<TParams extends Record<string, unknown> | undef
       retryable: false,
     });
   }
-  if (!chrome.runtime?.sendNativeMessage) {
-    throw new McpTransportError('mcp_native_messaging_unavailable', 'Browser native messaging is unavailable.', {
-      retryable: false,
-    });
-  }
 
   const expectedRequest = 'id' in message ? message as McpJsonRpcRequest<TParams> : undefined;
-  const response = await withTimeout(
-    sendNativeEnvelope(nativeHost, createNativeEnvelope(server, message)),
-    timeoutMs,
-  );
+  const envelope = createNativeEnvelope(server, message);
+
+  let response: unknown;
+  if (expectedRequest) {
+    response = await sendAndWait(nativeHost, envelope, expectedRequest.id, timeoutMs);
+  } else {
+    const state = getPortState(nativeHost);
+    state.port.postMessage(envelope);
+    return undefined as any;
+  }
+
   return normalizeJsonRpcResponse<TResult>(response, expectedRequest);
 }
 
-function sendNativeEnvelope(host: string, envelope: McpNativeEnvelope): Promise<unknown> {
+function sendAndWait(
+  nativeHost: string,
+  envelope: McpNativeEnvelope,
+  requestId: number | string,
+  timeoutMs: number,
+): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendNativeMessage(host, envelope, (response) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new McpTransportError('mcp_native_host_unavailable', error.message || 'Native messaging host is unavailable.', { retryable: false }));
-        return;
-      }
-      resolve(response);
-    });
+    let state: NativePortState;
+    try {
+      state = getPortState(nativeHost);
+    } catch (err) {
+      reject(err);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      state.pendingRequests.delete(requestId);
+      reject(new McpTransportError('mcp_native_timeout', `Native MCP request exceeded ${timeoutMs} ms.`));
+    }, timeoutMs);
+
+    state.pendingRequests.set(requestId, { resolve, reject, timer });
+    try {
+      state.port.postMessage(envelope);
+    } catch (err) {
+      clearTimeout(timer);
+      state.pendingRequests.delete(requestId);
+      reject(err);
+    }
   });
 }
 
@@ -85,13 +163,4 @@ function createNativeEnvelope(
     },
     message,
   };
-}
-
-function withTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new McpTransportError('mcp_native_timeout', `Native MCP request exceeded ${timeoutMs} ms.`));
-    }, timeoutMs);
-    task.then(resolve, reject).finally(() => clearTimeout(timeout));
-  });
 }

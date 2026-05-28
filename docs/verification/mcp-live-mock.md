@@ -22,21 +22,21 @@ All commands passed locally.
 - AgentRun-style MCP continuation loop
 - AgentRun call-history record shape with MCP provider/tool context
 
-### Chrome Live Smoke
+### Shell MCP Local Smoke
 
-On 2026-05-27, Chrome loaded `dist/chrome-mv3` as unpacked extension `dcmbfbnfefgjbhpflcnjbjoikacphpmi` and the DeepSeek page was refreshed after the extension reload. The OfficeCLI Streamable HTTP provider at `http://127.0.0.1:26316/mcp` reported ready with 7 discovered tools.
+On 2026-05-28, the Shell Native Messaging MCP host was validated locally with `npm run smoke:shell`. The host exposes `shell_status` and `shell_exec`, and rewrites `PATH` so user OfficeCLI locations such as `~/.local/bin` are searched before project `node_modules/.bin`.
 
-Live prompt:
+OfficeCLI probe through Shell MCP:
 
 ```text
-请调用 officecli_status 工具，工具结果返回后只用一句话说明 provider、roots 数量和 writeEnabled。不要创建或修改文件。
+请调用 shell_exec，执行：which -a officecli; officecli --version; officecli --help | sed -n '1,80p'。只总结当前 OfficeCLI 是否支持 view/get/set/batch/validate，不要创建或修改文件。
 ```
 
 Observed result:
 
-- `officecli_status` rendered as an executed MCP tool card instead of visible raw XML.
-- The tool result reported `provider: deepseek-pp-officecli`, one root under `/Users/zcl/code/deepseek-pp`, and `writeEnabled: true`.
-- DeepSeek continued after the tool result and answered in one sentence with provider/root/write status.
+- `shell_exec` returned `/Users/zcl/.local/bin/officecli` before the project `node_modules/.bin/officecli`.
+- The selected OfficeCLI reported `1.0.100` and listed command-based operations including `view`, `get`, `set`, `batch`, and `validate`.
+- The hosted generation path `new --prompt` is not used by the built-in `/officecli` skill.
 
 `npm run smoke:mcp` verifies:
 

@@ -2,6 +2,7 @@ import { DEEPSEEK_API_URL, DPP_MANAGED_AGENT_PROMPT_MARKER, PRESET_REINJECTION_I
 import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord, ToolDescriptor } from '../types';
 import { buildPromptAugmentation } from '../prompt';
 import { parseSkillCommand } from '../skill/parser';
+import { SHELL_TOOL_NAMES } from '../shell/contracts';
 import {
   DEFAULT_TOOL_DESCRIPTORS,
   createToolInvocationCatalog,
@@ -589,6 +590,12 @@ class XmlToolStreamFilter {
 
   constructor(descriptors: readonly ToolDescriptor[] = DEFAULT_TOOL_DESCRIPTORS) {
     this.catalog = createToolInvocationCatalog(descriptors);
+    // Always recognize shell tool names for filtering, even if not in descriptors
+    for (const name of SHELL_TOOL_NAMES) {
+      if (!this.catalog.invocationNames.includes(name)) {
+        this.catalog.invocationNames.push(name);
+      }
+    }
     this.toolOpenTags = this.catalog.invocationNames.map(getToolOpenTag);
   }
 

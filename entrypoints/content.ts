@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_TOOL_DESCRIPTORS, createToolInvocationCatalog } from '../core/tool/invocation';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
+import { SHELL_TOOL_NAMES } from '../core/shell';
 import type { ResponseCompletePayload, ResponseTokenSpeedPayload } from '../core/interceptor/fetch-hook';
 import type {
   InlineAgentStartPayload,
@@ -1006,8 +1007,11 @@ function buildToolMarkerRegex(descriptors: ToolDescriptor[]): RegExp {
 }
 
 function buildToolTagPattern(descriptors: ToolDescriptor[]): string {
-  const names = createToolInvocationCatalog(descriptors).invocationNames.map(escapeRegExp);
-  return names.length > 0 ? names.join('|') : 'memory_save|memory_update|memory_delete';
+  const catalogNames = createToolInvocationCatalog(descriptors).invocationNames;
+  const names = new Set(catalogNames);
+  for (const name of SHELL_TOOL_NAMES) names.add(name);
+  const escaped = [...names].map(escapeRegExp);
+  return escaped.length > 0 ? escaped.join('|') : 'memory_save|memory_update|memory_delete';
 }
 
 function hashString(value: string): string {
@@ -1595,11 +1599,12 @@ function getToolCleanupRoots(): Element[] {
     if (message) roots.add(message);
   }
 
-  if (toolExecutions.length > 0) {
-    const messages = document.querySelectorAll('.ds-message');
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && containsToolMarker(lastMessage.textContent)) {
-      roots.add(lastMessage);
+  const messages = document.querySelectorAll('.ds-message');
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (roots.has(message)) continue;
+    if (containsToolMarker(message.textContent)) {
+      roots.add(message);
     }
   }
 

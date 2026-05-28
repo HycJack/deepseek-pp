@@ -41,30 +41,36 @@ After source changes:
 6. Click `刷新工具` to populate the cache.
 7. Confirm each tool's enabled state. Only tools with server `auto` policy and enabled tool state are injected into prompts.
 
-### OfficeCLI Provider
+### Shell MCP And OfficeCLI
 
-OfficeCLI is exposed as a local Streamable HTTP MCP provider. The browser extension does not launch `officecli` directly and does not accept raw shell commands from a skill prompt.
+OfficeCLI document work now uses the Shell Native Messaging MCP host. The browser extension still does not execute local commands itself; it sends `shell_exec` calls to the installed native host.
 
-Start the provider:
-
-```bash
-npm run officecli:mcp -- --root /path/to/documents
-```
-
-Use `--root` repeatedly to allow multiple document folders. Only `.docx`, `.xlsx`, and `.pptx` inputs under those roots are accepted. The provider defaults to read-only behavior; mutation tools return `officecli_write_disabled` until the provider is restarted with:
+Install the native host and command-based OfficeCLI:
 
 ```bash
-npm run officecli:mcp -- --root /path/to/documents --write enabled
+npm run shell:install -- --browser chrome --extension-id <extension-id>
 ```
 
-The sidepanel `OfficeCLI` quick-start creates a normal MCP server entry for `http://127.0.0.1:26316/mcp` with an allowlist that includes status, read, issue, validate, and preview tools only. `officecli_status` reports the active roots, relative path base, binary path, and write state so the model does not have to infer the local working directory. To create or batch-mutate documents, enable provider writes and manually allow `officecli_create_document` or `officecli_apply_edit_plan` in the discovered tool list.
+Use `--browser edge` or `--browser firefox` for those targets. The installer detects the user's OS/CPU, downloads the matching single-binary asset from `iOfficeAI/OfficeCLI`, verifies `SHA256SUMS` when available, and installs it to `~/.local/bin/officecli` on macOS/Linux or `%LOCALAPPDATA%\OfficeCLI\officecli.exe` on Windows. Pass `--skip-officecli` only when OfficeCLI is managed separately.
+
+After installation, create the sidepanel `Shell` preset, then test and refresh tools.
+
+The built-in `/officecli` skill must use the command-based OfficeCLI surface through `shell_exec`. Before touching a document, verify that the selected binary supports the scripted commands:
+
+```bash
+which -a officecli || true
+officecli --version
+officecli --help | sed -n '1,140p'
+```
+
+The acceptable OfficeCLI help output includes commands such as `view`, `get`, `set`, `add`, `validate`, and `batch`, plus global `--json`. If the selected binary only exposes hosted-generation commands such as `new`, `doctor`, `login`, `set-key`, `config`, or `upgrade`, do not call `new --prompt`; switch the OfficeCLI binary first.
 
 ### Verification Commands
 
 ```bash
 npm run verify:mcp:mock
 npm run smoke:mcp
-npm run smoke:officecli
+npm run smoke:shell
 npm run compile
 npm run build:all
 ```
@@ -104,8 +110,8 @@ Use the printed URL as a Streamable HTTP MCP server in the sidepanel.
 - Tool is discovered but not injected: check server enabled state, execution mode, and per-tool allow/deny state.
 - Tool executes once but does not continue: verify the current DeepSeek page has the latest extension content script. Manual chat continuations reuse the AgentRun runner and may continue MCP tool calls for up to 3 rounds when tool schemas are still available; scheduled/manual Agent tasks may continue for up to 8 tool loops.
 - Stdio server does not start: verify the bridge process, command, args, cwd, and env. The extension itself does not launch stdio processes directly.
-- `officecli_binary_missing`: install OfficeCLI or start the provider with `--officecli /path/to/officecli`.
-- `officecli_path_denied`: restart the provider with a `--root` that contains the target document.
-- `officecli_write_disabled`: restart the provider with `--write enabled`, then explicitly allow the mutation tool in the sidepanel.
+- `mcp_native_host_unavailable`: run `npm run shell:install ...`, then restart the browser.
+- `officecli: command not found`: rerun `npm run shell:install ...` or place command-based OfficeCLI under `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, or `%LOCALAPPDATA%\OfficeCLI`.
+- OfficeCLI help only shows hosted generation commands: the wrong binary is first on `PATH`; remove the npm wrapper from the project or put the command-based binary earlier on `PATH`.
 - `officecli_file_locked`: close the document in other OfficeCLI resident/watch sessions or external editors, then retry.
-- Visible `<officecli_...>` text in the chat with no tool card means the current DeepSeek page did not execute that tag. Refresh the DeepSeek page after reloading the extension or refreshing MCP tools so the content script receives the latest tool descriptor list.
+- Visible `<shell_exec>` text in the chat with no tool card means the current DeepSeek page did not execute that tag. Refresh the DeepSeek page after reloading the extension or refreshing MCP tools so the content script receives the latest tool descriptor list.

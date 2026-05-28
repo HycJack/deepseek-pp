@@ -34,24 +34,19 @@
 ### OfficeCLI 文档工具
 
 - **内置 `/officecli` skill** — 面向 `.docx`、`.xlsx`、`.pptx` 的检查、问题定位、验证和受控修改流程
-- **本地 MCP provider** — 扩展不直接执行本机命令，OfficeCLI 通过本地 Streamable HTTP MCP provider 暴露固定工具
-- **安全默认值** — 侧边栏 OfficeCLI 预设只自动注入状态、读取、问题检查、验证和预览工具；创建和批量修改工具默认不放行
-- **根目录白名单** — provider 只允许访问启动时 `--root` 指定目录下的 Office 文件
-- **显式写入开关** — 修改文档必须同时满足 provider 以 `--write enabled` 启动，且 MCP 工具列表中手动放行写工具
+- **通过 Shell MCP 执行** — 侧边栏创建 `Shell` 预设后，模型通过 `shell_exec` 调用本机命令版 OfficeCLI
+- **自动安装命令版** — `shell:install` 会按系统和 CPU 架构从 iOfficeAI/OfficeCLI 官方发布资产安装单二进制
+- **命令版优先** — skill 会先检查 `officecli --help` 是否包含 `view/get/set/batch` 等脚本化命令
+- **拒绝额度生成路径** — 如果当前二进制只有 `new --prompt` 这类 hosted AI 生成能力，skill 会停止并提示切换 OfficeCLI 二进制
+- **真实本机路径** — 文档路径由用户提供或通过 Shell MCP 查询，不猜测占位目录
 
-启动本地 provider：
-
-```bash
-npm run officecli:mcp -- --root /path/to/documents
-```
-
-如需允许批量修改：
+安装 Shell Native Host：
 
 ```bash
-npm run officecli:mcp -- --root /path/to/documents --write enabled
+npm run shell:install -- --browser chrome --extension-id <扩展ID>
 ```
 
-然后在侧边栏 `MCP` 页点击 `OfficeCLI` 创建预设，授权 `http://127.0.0.1:26316/mcp`，再点击测试和刷新工具。`officecli_status` 会把 provider 当前的 roots、相对路径基准和写入状态暴露给模型，避免让模型猜工作目录。
+这个命令会同时安装 Shell Native Host 和命令版 OfficeCLI。然后在侧边栏 `MCP` 页点击 `Shell` 创建预设，点击测试和刷新工具。命令版 OfficeCLI 可继续使用 `create/get/set/view/batch/validate` 等脚本化命令，不走 `new --prompt` 的 hosted 生成额度。
 
 ### 记忆系统
 
@@ -118,10 +113,10 @@ npm run build:firefox
 npm run build:all
 ```
 
-OfficeCLI provider 的 smoke check：
+Shell MCP host 的 smoke check：
 
 ```bash
-npm run smoke:officecli
+npm run smoke:shell
 ```
 
 | 浏览器 | 加载入口 | 构建目录 |

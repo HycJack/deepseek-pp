@@ -40,6 +40,7 @@ import {
 } from '../core/mcp/store';
 import { refreshMcpServerDiscovery } from '../core/mcp/discovery';
 import { getMcpOriginPattern, requestMcpServerOriginPermission } from '../core/mcp/transports';
+import { SHELL_MCP_NATIVE_HOST, SHELL_MCP_SERVER_NAME, createShellMcpPresetInput } from '../core/shell';
 import type { BackgroundConfig, DeepSeekTheme, Memory, ModelType, NewMemory, Skill, SyncConfig, SystemPromptPreset, ToolCall, ToolResult } from '../core/types';
 import type { McpServerCreateInput, McpServerUpdateInput } from '../core/mcp/types';
 
@@ -52,6 +53,7 @@ export default defineBackground(() => {
   enableSidePanelActionClick();
 
   archiveStaleMemories().catch((error) => reportBackgroundStartupError('archive_stale_memories_failed', error));
+  ensureShellMcpPreset().catch((error) => reportBackgroundStartupError('shell_mcp_preset_failed', error));
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleMessage(message, sender)
@@ -67,6 +69,16 @@ function enableSidePanelActionClick() {
   const sidePanel = (chrome as typeof chrome & { sidePanel?: SidePanelApi }).sidePanel;
   sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true })
     .catch((error) => reportBackgroundStartupError('sidepanel_behavior_failed', error));
+}
+
+async function ensureShellMcpPreset() {
+  const servers = await getAllMcpServers();
+  const exists = servers.some((s) =>
+    s.displayName === SHELL_MCP_SERVER_NAME || s.transport.nativeHost === SHELL_MCP_NATIVE_HOST
+  );
+  if (!exists) {
+    await createMcpServer(createShellMcpPresetInput({ enabled: false }));
+  }
 }
 
 function reportBackgroundStartupError(code: string, error: unknown) {
