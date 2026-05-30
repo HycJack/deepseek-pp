@@ -183,7 +183,7 @@ export default function McpPage() {
       return;
     }
     setSelectedId(server.id);
-    setMessage(`已创建 Shell MCP 预设。请在插件源码目录下运行安装命令（见下方提示）。`);
+    setMessage('已创建 Shell MCP 预设。请运行下方安装命令后重启浏览器。');
     await load();
   };
 
@@ -1195,15 +1195,18 @@ function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: Mcp
         <div>{message}</div>
       )}
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
-        打开终端，在插件源码目录下执行以下命令（只需一次）：
+        打开终端，执行以下命令（只需一次）：
       </div>
       <div className="mt-1 font-mono break-all select-all rounded px-2 py-1" style={{ color: 'var(--ds-text)', background: 'var(--ds-surface)' }}>
         {setup.command}
       </div>
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
         {setup.usesExtensionId
-          ? `已自动检测 ${browserLabel(setup.browser)} 扩展 ID。安装需要本机已安装 Node.js。`
-          : 'Firefox 使用固定扩展 ID，不需要额外填写 extension id。安装需要本机已安装 Node.js。'}
+          ? `已自动检测 ${browserLabel(setup.browser)} 扩展 ID。安装需要本机已安装 Node.js/npm。`
+          : 'Firefox 使用固定扩展 ID，不需要额外填写 extension id。安装需要本机已安装 Node.js/npm。'}
+      </div>
+      <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
+        Shell MCP 会启用本机命令执行能力，并默认安装命令版 OfficeCLI。
       </div>
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
         {!server.enabled
@@ -1214,11 +1217,11 @@ function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: Mcp
   );
 }
 
-type NativeHostBrowser = 'chrome' | 'edge' | 'firefox';
+type NativeHostBrowser = 'chrome' | 'chromium' | 'edge' | 'firefox';
 
 function shellInstallCommand(): { browser: NativeHostBrowser; command: string; usesExtensionId: boolean } {
   const browser = currentNativeHostBrowser();
-  const base = `npm run shell:install -- --browser ${browser}`;
+  const base = `npx deepseek-pp-shell-host install --browser ${browser}`;
   if (browser === 'firefox') {
     return { browser, command: base, usesExtensionId: false };
   }
@@ -1234,19 +1237,24 @@ function currentNativeHostBrowser(): NativeHostBrowser {
   const ua = navigator.userAgent;
   if (/\bFirefox\//.test(ua)) return 'firefox';
   if (/\bEdg\//.test(ua)) return 'edge';
+  if (/\bChromium\//.test(ua) && !/\bChrome\//.test(ua)) return 'chromium';
   return 'chrome';
 }
 
 function browserLabel(browser: NativeHostBrowser): string {
   if (browser === 'edge') return 'Edge';
   if (browser === 'firefox') return 'Firefox';
+  if (browser === 'chromium') return 'Chromium';
   return 'Chrome';
 }
 
 function shellSetupMessage(server: McpServerConfig, cache: McpToolCacheEntry | null): { message: string; isError: boolean } {
   const error = `${cache?.health.error ?? ''} ${server.lastError ?? ''}`.toLowerCase();
+  if (error.includes('forbidden')) {
+    return { message: 'Native Host 已安装，但未授权当前扩展 ID。请重新运行下方安装命令后重启浏览器。', isError: true };
+  }
   if (error.includes('native_host_unavailable') || error.includes('native messaging host not found') || error.includes('not found') || error.includes('specified native messaging host')) {
-    return { message: '未找到 Native Host — 请先运行下方安装命令，并确保已安装 Node.js。', isError: true };
+    return { message: '未找到 Native Host — 请先运行下方安装命令，并确保已安装 Node.js/npm。', isError: true };
   }
   if (error.includes('native_messaging_unavailable')) {
     return { message: '当前浏览器不支持 Native Messaging，请使用 Chrome、Edge 或 Firefox。', isError: true };

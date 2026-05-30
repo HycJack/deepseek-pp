@@ -22,8 +22,15 @@ const CHAT_STREAM_PATHS = [COMPLETION_PATH, REGENERATE_PATH];
 const HISTORY_PATH = '/api/v0/chat/history_messages';
 const BYPASS_HOOK_HEADER = 'X-DPP-Bypass-Hook';
 const TOKEN_SPEED_EMIT_INTERVAL_MS = 250;
+const INITIAL_HOOK_STATE_WAIT_MS = 1_500;
 
 let originalFetch: typeof window.fetch;
+let initialHookStateWaitComplete = false;
+let initialHookStateReadyResolved = false;
+let resolveInitialHookState: (() => void) | null = null;
+const initialHookStateReady = new Promise<void>((resolve) => {
+  resolveInitialHookState = resolve;
+});
 
 interface HookState {
   memories: Memory[];
@@ -57,6 +64,9 @@ let hookState: HookState = {
 
 export function updateHookState(partial: Partial<HookState>) {
   hookState = { ...hookState, ...partial };
+  if (Object.prototype.hasOwnProperty.call(partial, 'toolDescriptors')) {
+    markInitialHookStateReady();
+  }
 }
 
 export function installFetchHook() {
@@ -124,6 +134,7 @@ function hookFetch() {
       return originalFetch.call(this, input, { ...init, headers: stripBypassHookHeader(init.headers) });
     }
 
+    await waitForInitialHookState();
     rememberDeepSeekClientHeaders(init.headers);
     const originalContext = createRequestContext(init.body);
     const modified = modifyRequestBody(init.body);
@@ -159,21 +170,49 @@ function hookXHR() {
   XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null) {
     const url = xhrUrls.get(this);
     if (url && isChatStreamURL(url) && typeof body === 'string') {
-      rememberDeepSeekClientHeaders(xhrHeaders.get(this));
-      const originalContext = createRequestContext(body);
-      const modified = modifyRequestBody(body);
-      const requestBody = modified?.body ?? body;
-      setupXHRResponseInterceptor(this, createRequestContext(requestBody, {
-        originalPrompt: originalContext.originalPrompt,
-        agentTaskPrompt: modified?.agentTaskPrompt ?? originalContext.agentTaskPrompt,
-      }));
-      return origSend.call(this, requestBody);
+      const xhr = this;
+      const sendChatRequest = () => {
+        rememberDeepSeekClientHeaders(xhrHeaders.get(xhr));
+        const originalContext = createRequestContext(body);
+        const modified = modifyRequestBody(body);
+        const requestBody = modified?.body ?? body;
+        setupXHRResponseInterceptor(xhr, createRequestContext(requestBody, {
+          originalPrompt: originalContext.originalPrompt,
+          agentTaskPrompt: modified?.agentTaskPrompt ?? originalContext.agentTaskPrompt,
+        }));
+        return origSend.call(xhr, requestBody);
+      };
+      if (initialHookStateWaitComplete) return sendChatRequest();
+      void waitForInitialHookState().then(sendChatRequest);
+      return;
     }
     if (url && url.includes(HISTORY_PATH)) {
       setupXHRHistoryInterceptor(this);
     }
     return origSend.call(this, body);
   };
+}
+
+function markInitialHookStateReady() {
+  initialHookStateWaitComplete = true;
+  if (!initialHookStateReadyResolved) {
+    initialHookStateReadyResolved = true;
+    resolveInitialHookState?.();
+  }
+}
+
+async function waitForInitialHookState(): Promise<void> {
+  if (initialHookStateWaitComplete) return;
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    initialHookStateReady,
+    new Promise<void>((resolve) => {
+      timeoutId = setTimeout(resolve, INITIAL_HOOK_STATE_WAIT_MS);
+    }),
+  ]);
+  if (timeoutId) clearTimeout(timeoutId);
+  initialHookStateWaitComplete = true;
 }
 
 function createRequestContext(bodyStr: string, overrides: RequestContextOverrides = {}): RequestContext {

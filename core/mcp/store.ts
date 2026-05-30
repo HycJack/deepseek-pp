@@ -5,6 +5,7 @@ import type {
   McpServerConfig,
   McpServerCreateInput,
   McpServerId,
+  McpServerStatus,
   McpServerStorageState,
   McpServerTimeouts,
   McpServerUpdateInput,
@@ -98,7 +99,7 @@ export async function updateMcpServer(
       ...server,
       ...nextPatch,
       updatedAt: Date.now(),
-      status: nextPatch.enabled === false ? 'disabled' : nextPatch.status ?? server.status,
+      status: resolvePatchedServerStatus(server, nextPatch),
     });
     if (shouldInvalidateMcpToolCache(server, nextServer)) {
       cacheInvalidations.add(server.id);
@@ -216,6 +217,7 @@ function normalizeServer(raw: unknown): McpServerConfig {
   const value = raw && typeof raw === 'object' ? raw as Partial<McpServerConfig> : {};
   const now = Date.now();
   const enabled = value.enabled !== false;
+  const status = normalizeServerStatus(value.status, enabled);
   return {
     version: STORAGE_VERSION,
     id: stringValue(value.id) || crypto.randomUUID(),
@@ -249,12 +251,30 @@ function normalizeServer(raw: unknown): McpServerConfig {
       mode: value.execution?.mode === 'manual' || value.execution?.mode === 'disabled' ? value.execution.mode : 'auto',
       enabled: value.execution?.enabled !== false,
     },
-    status: enabled ? value.status ?? 'unknown' : 'disabled',
+    status,
     lastConnectedAt: nullableNumber(value.lastConnectedAt),
     lastError: stringValue(value.lastError),
     createdAt: positiveNumber(value.createdAt, now),
     updatedAt: positiveNumber(value.updatedAt, now),
   };
+}
+
+function resolvePatchedServerStatus(
+  server: McpServerConfig,
+  patch: McpServerUpdateInput,
+): McpServerStatus {
+  if (patch.enabled === false) return 'disabled';
+  if (patch.status) return patch.status;
+  if (patch.enabled === true && (!server.enabled || server.status === 'disabled')) return 'unknown';
+  return server.status;
+}
+
+function normalizeServerStatus(
+  status: McpServerStatus | undefined,
+  enabled: boolean,
+): McpServerStatus {
+  if (!enabled) return 'disabled';
+  return status && status !== 'disabled' ? status : 'unknown';
 }
 
 function redactSecret(secret: McpSecretValue): McpSecretValue {

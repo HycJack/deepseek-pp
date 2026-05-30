@@ -1,6 +1,6 @@
 # Chrome Web Store Submission Runbook
 
-Last updated: 2026-05-29
+Last updated: 2026-05-30
 
 This runbook covers the parts that can be prepared from the repository and the parts that must be confirmed in the Chrome Web Store Developer Dashboard.
 
@@ -14,7 +14,7 @@ Official references:
 
 ## Current Status
 
-- Chrome MV3 package exists at `dist/deepseek-plus-plus-0.4.2-chrome.zip`.
+- Chrome MV3 package exists at `dist/deepseek-plus-plus-0.4.4-chrome.zip`.
 - Package root contains `manifest.json`.
 - Package size is below the Chrome Web Store package limit.
 - Required icon exists at `public/icon/128.png`.
@@ -47,7 +47,7 @@ npm run zip:chrome
 Upload:
 
 ```text
-dist/deepseek-plus-plus-0.4.2-chrome.zip
+dist/deepseek-plus-plus-0.4.4-chrome.zip
 ```
 
 ## Store Listing Fields
@@ -110,7 +110,7 @@ Schedules and wakes user-created automation tasks. Automation runs only for task
 #### `nativeMessaging`
 
 ```text
-Connects to a user-configured local Native Messaging host for local MCP tools. The built-in Shell preset is disabled until the user configures and enables it.
+Connects to a user-configured local Native Messaging host for local MCP tools. The built-in Shell preset is disabled until the user installs the DeepSeek++ Shell host, configures it, and enables it.
 ```
 
 #### `sidePanel`
@@ -151,7 +151,7 @@ Use this reviewer note:
 3. Click the extension action to open the side panel.
 4. Create a memory or skill in the side panel.
 5. Send a DeepSeek message that uses the saved memory/skill. The extension should inject selected context and render tool execution results inline.
-6. Optional MCP/WebDAV/native messaging features require user-provided endpoints or local hosts and are disabled until configured by the user.
+6. Optional MCP/WebDAV/native messaging features require user-provided endpoints or a user-installed local Shell host and are disabled until configured by the user.
 ```
 
 No test account is included because the extension works with the reviewer's own DeepSeek session.

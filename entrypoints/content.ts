@@ -256,6 +256,8 @@ export default defineContentScript({
 
     window.addEventListener('message', handleMainWorldMessage);
 
+    void loadAndSyncRuntimeState().catch(() => undefined);
+
     await new Promise((r) => {
       if (document.readyState === 'complete' || document.readyState === 'interactive') r(undefined);
       else document.addEventListener('DOMContentLoaded', () => r(undefined), { once: true });
@@ -266,15 +268,6 @@ export default defineContentScript({
     startTokenSpeedIndicatorMountObserver();
     startTokenSpeedRouteWatcher();
 
-    const [memories, skills, activePreset, modelType, toolDescriptors] = await Promise.all([
-      sendRuntimeMessage<Memory[]>({ type: 'GET_MEMORIES' }),
-      sendRuntimeMessage<Skill[]>({ type: 'GET_SKILLS' }),
-      sendRuntimeMessage<SystemPromptPreset | null>({ type: 'GET_ACTIVE_PRESET' }),
-      sendRuntimeMessage<ModelType>({ type: 'GET_MODEL_TYPE' }),
-      sendRuntimeMessage<ToolDescriptor[]>({ type: 'GET_TOOL_DESCRIPTORS' }),
-    ]);
-
-    syncToMainWorld(memories ?? [], skills ?? [], activePreset ?? null, modelType ?? null, normalizeToolDescriptors(toolDescriptors));
     startRenderedToolCallCleaner();
     void restorePersistedToolBlocks();
     void restorePersistedInlineAgentTraces();
@@ -304,6 +297,18 @@ export default defineContentScript({
     });
   },
 });
+
+async function loadAndSyncRuntimeState() {
+  const [memories, skills, activePreset, modelType, toolDescriptors] = await Promise.all([
+    sendRuntimeMessage<Memory[]>({ type: 'GET_MEMORIES' }),
+    sendRuntimeMessage<Skill[]>({ type: 'GET_SKILLS' }),
+    sendRuntimeMessage<SystemPromptPreset | null>({ type: 'GET_ACTIVE_PRESET' }),
+    sendRuntimeMessage<ModelType>({ type: 'GET_MODEL_TYPE' }),
+    sendRuntimeMessage<ToolDescriptor[]>({ type: 'GET_TOOL_DESCRIPTORS' }),
+  ]);
+
+  syncToMainWorld(memories ?? [], skills ?? [], activePreset ?? null, modelType ?? null, normalizeToolDescriptors(toolDescriptors));
+}
 
 function hasLiveExtensionContext(): boolean {
   if (!extensionContextValid) return false;

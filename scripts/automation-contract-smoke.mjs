@@ -21,6 +21,9 @@ const requiredFiles = [
   'entrypoints/sidepanel/pages/AutomationPage.tsx',
   'scripts/shell-mcp-host.mjs',
   'scripts/install-shell-host.mjs',
+  'packages/shell-host/package.json',
+  'packages/shell-host/lib/installer.mjs',
+  'packages/shell-host/native/shell-mcp-host.mjs',
 ];
 
 const removedPaths = [
@@ -53,8 +56,11 @@ assertContains('core/inline-agent/prompt.ts', 'buildContinuationPrompt');
 assertContains('core/inline-agent/renderer.ts', 'createAgentStepElement');
 assertContains('core/deepseek/adapter.ts', 'BYPASS_HOOK_HEADER');
 assertContains('core/shell/index.ts', 'createShellMcpPresetInput');
-assertContains('scripts/shell-mcp-host.mjs', 'shell_exec');
-assertContains('scripts/install-shell-host.mjs', 'OFFICECLI_REQUIRED_HELP_PATTERNS');
+assertContains('scripts/shell-mcp-host.mjs', '../packages/shell-host/native/shell-mcp-host.mjs');
+assertContains('scripts/install-shell-host.mjs', '../packages/shell-host/lib/installer.mjs');
+assertContains('packages/shell-host/package.json', 'deepseek-pp-shell-host');
+assertContains('packages/shell-host/native/shell-mcp-host.mjs', 'shell_exec');
+assertContains('packages/shell-host/lib/installer.mjs', 'OFFICECLI_REQUIRED_HELP_PATTERNS');
 assertNotContains('README.md', ['Agent', '任务'].join(' '));
 assertNotContains('README.md', ['screenshot-sidepanel', 'agent.svg'].join('-'));
 

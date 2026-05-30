@@ -63,7 +63,7 @@
 - **官方 Skill 库** — 内置 OfficeCLI 官方的 DOCX、XLSX、PPTX、Pitch Deck、Academic Paper、Financial Model、Dashboard、Morph PPT 等场景技能
 - **官方样式库** — 内置 OfficeCLI 官方 PPT styles 索引和样式说明，可用 `/officecli-pptx /officecli-styles ...` 链式加载完整视觉风格
 - **通过 Shell MCP 执行** — 侧边栏创建 `Shell` 预设后，模型通过 `shell_exec` 调用本机命令版 OfficeCLI
-- **自动安装命令版** — `shell:install` 会按系统和 CPU 架构从 iOfficeAI/OfficeCLI 官方发布资产安装单二进制
+- **自动安装命令版** — `deepseek-pp-shell-host` 会按系统和 CPU 架构从 iOfficeAI/OfficeCLI 官方发布资产安装单二进制
 - **命令版优先** — skill 会先检查 `officecli --help` 是否包含 `view/get/set/batch` 等脚本化命令
 - **拒绝额度生成路径** — 如果当前二进制只有 `new --prompt` 这类 hosted AI 生成能力，skill 会停止并提示切换 OfficeCLI 二进制
 - **真实本机路径** — 文档路径由用户提供或通过 Shell MCP 查询，不猜测占位目录
@@ -71,10 +71,16 @@
 安装 Shell Native Host：
 
 ```bash
-npm run shell:install -- --browser chrome --extension-id <扩展ID>
+npx deepseek-pp-shell-host install --browser chrome --extension-id <扩展ID>
 ```
 
-这个命令会同时安装 Shell Native Host 和命令版 OfficeCLI。然后在侧边栏 `MCP` 页点击 `Shell` 创建预设，点击测试和刷新工具。命令版 OfficeCLI 可继续使用 `create/get/set/view/batch/validate` 等脚本化命令，不走 `new --prompt` 的 hosted 生成额度。
+侧边栏 `MCP` 页会自动填入当前扩展 ID。这个命令会同时安装 Shell Native Host 和命令版 OfficeCLI；Shell MCP 会启用本机命令执行能力。安装后重启浏览器，然后在侧边栏 `MCP` 页点击 `Shell` 创建预设，点击测试和刷新工具。命令版 OfficeCLI 可继续使用 `create/get/set/view/batch/validate` 等脚本化命令，不走 `new --prompt` 的 hosted 生成额度。
+
+从源码开发时也可以继续使用：
+
+```bash
+npm run shell:install -- --browser chrome --extension-id <扩展ID>
+```
 
 ### 记忆系统
 
@@ -121,7 +127,21 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
   <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
 </p>
 
-## 0.4.3 变更回顾
+## 0.4.4 变更回顾
+
+0.4.4 是 Shell MCP 商店安装体验修复版本，重点让通过浏览器商店安装的用户也能按侧边栏提示完成本机 Shell Host 配置。
+
+| 方向 | 主要变化 |
+|------|----------|
+| Shell MCP 安装 | 新增 `deepseek-pp-shell-host` npm installer，用户可通过 `npx deepseek-pp-shell-host install ...` 安装 Shell Native Host。 |
+| 商店用户路径 | Shell Host 安装到用户目录，不再依赖插件源码目录；Chrome、Edge、Chromium 和 Firefox 都有对应安装命令。 |
+| 侧边栏提示 | MCP 页会自动填入当前扩展 ID，并对 Native Host 已安装但扩展 ID 未授权的情况给出明确提示。 |
+| 文档与发布 | README、Chrome Web Store 文案和 MCP 操作说明同步为用户安装路径，源码安装命令仅作为开发者入口保留。 |
+
+<details>
+<summary>展开 0.4.3 变更回顾</summary>
+
+### 0.4.3 变更回顾
 
 0.4.3 是长任务稳定性和互动反馈增强版本，重点改善 DeepSeek 校验兼容、Agent 式持续执行节奏和悬浮宠物状态反馈。
 
@@ -132,6 +152,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | 悬浮宠物 | DeepSeek 小鲸鱼新增状态台词气泡，会在思考、输出、工具执行和空闲状态展示并轮播反馈。 |
 | Issue 入口 | 新增标准 issue 表单和模板检查，未填写必要信息的问题会自动关闭并提示补充。 |
 | 发布文档 | README 新增 0.4.3 变更回顾，并将 0.4.2 / 0.4.1 / 0.4.0 / 0.3.0 / 0.2.0 继续保留为折叠历史。 |
+
+</details>
 
 <details>
 <summary>展开 0.4.2 变更回顾</summary>
