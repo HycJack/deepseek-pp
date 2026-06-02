@@ -1,8 +1,37 @@
-# DeepSeek++
+# DeepSeek++ - DeepSeek 浏览器插件与 AI Agent 工具平台
 
-为 [DeepSeek](https://chat.deepseek.com) 网页版注入 **侧边栏对话**、**类原生工具调用**、**内置网络工具**、**MCP 工具系统**、**Agentic 记忆系统**、**Skill 技能系统**、**系统提示词预设**、**Agent 式持续执行** 和 **自动化任务** 的 Chrome / Edge / Firefox 扩展。
+DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的 Chrome / Edge / Firefox 浏览器扩展，为 DeepSeek 注入 **侧边栏对话**、**类原生工具调用**、**内置网络工具**、**MCP 工具系统**、**Agentic 记忆系统**、**Skill 技能系统**、**系统提示词预设**、**Agent 式持续执行** 和 **自动化任务**。
+
+English: DeepSeek++ is a DeepSeek browser extension for AI agent workflows, long-term memory, MCP tools, web search, Skills, system prompts, automation, and side-panel chat.
 
 让 DeepSeek 像支持原生 tools 一样自动执行记忆保存、更新、删除、网络搜索、网页获取和 MCP 工具调用，拥有跨对话长期记忆，并通过 `/skill` 指令一键切换专家模式。侧边栏可以直接发起对话，也可以把网页选中文本送入对话；Agent 式持续执行让模型像 Claude Code / Codex 一样，在工具调用、结果回传和下一步生成之间持续推进任务；自动化任务则负责把固定任务放进独立会话里立即触发或按计划触发。
+
+## 目录
+
+- [功能速览](#功能速览)
+- [适合场景](#适合场景)
+- [核心功能](#核心功能)
+- [0.6.0 变更回顾](#060-变更回顾)
+- [安装](#安装)
+- [友情链接](#友情链接)
+
+## 功能速览
+
+| 需求 | DeepSeek++ 提供 |
+|------|----------------|
+| DeepSeek Chrome extension / DeepSeek 浏览器插件 | 在 DeepSeek 网页版中加入侧边栏对话、右键发送文本、工具执行结果展示和多浏览器支持。 |
+| DeepSeek MCP tools | 在侧边栏管理 MCP 服务、工具权限和执行状态，并把工具结果带回同一会话继续生成。 |
+| DeepSeek memory / 长期记忆 | 自动保存、筛选和注入长期记忆，让不同对话可以复用用户偏好、项目背景和常用信息。 |
+| DeepSeek Skills / `/skill` 工作流 | 通过内置、自定义或 GitHub 导入的 Skill 快速切换专家模式和任务模板。 |
+| DeepSeek automation / 自动化任务 | 把固定任务放入独立 DeepSeek 会话，支持立即运行、定时触发、状态追踪和手动停止。 |
+| DeepSeek web search / 网页获取 | 在需要实时信息或指定网页内容时搜索互联网、读取网页文本，并继续生成最终回答。 |
+
+## 适合场景
+
+- 希望把 DeepSeek 网页版扩展成带工具调用、MCP、记忆和自动化能力的 AI agent 工作台。
+- 希望在 Chrome、Edge 或 Firefox 中直接使用 DeepSeek 侧边栏对话、网页文本发送和固定场景 prompt。
+- 希望把项目背景、个人偏好、常用工作流和文档处理能力沉淀为长期记忆与可复用 Skill。
+- 希望让 DeepSeek 处理需要多步工具执行、联网搜索、网页读取或定时跟踪的任务。
 
 ## 核心功能
 
@@ -63,7 +92,7 @@
 
 ### MCP 工具系统
 
-- **支持多种传输方式** — 支持 Streamable HTTP、SSE、本地 stdio bridge 和浏览器 Native Messaging
+- **灵活接入** — 可添加远程或本机 MCP 服务，适合连接浏览器侧工具、本机命令和团队已有工具
 - **默认自动执行** — 新增 MCP 服务默认自动执行，可在侧边栏按服务或单个工具切换为手动
 - **权限管理** — 侧边栏可直接授权、测试连接、刷新工具和查看状态
 - **结果自动回传** — 工具执行完成后，结果自动发回同一会话继续生成，实现多轮工具调用
