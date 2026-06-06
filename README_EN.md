@@ -27,7 +27,7 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#061-release-highlights">0.6.1 Highlights</a>
+  <a href="#062-release-highlights">0.6.2 Highlights</a>
 </p>
 
 DeepSeek++ is a Chrome / Edge / Firefox browser extension for [DeepSeek Web](https://chat.deepseek.com). It adds side-panel chat, native-feeling tool execution, built-in web tools, MCP tools, long-term memory, Skills, system prompt presets, conversation export, agentic continuation, and automation tasks.
@@ -39,7 +39,7 @@ It can send selected web-page text to DeepSeek, keep working through multi-step 
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [0.6.1 Release Highlights](#061-release-highlights)
+- [0.6.2 Release Highlights](#062-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -214,7 +214,22 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="Automation task side panel">
 </p>
 
-## 0.6.1 Release Highlights
+## 0.6.2 Release Highlights
+
+0.6.2 focuses on conversation export and cross-platform Shell reliability. It lets users archive DeepSeek conversations locally and improves native command execution on Windows.
+
+| Area | Main changes |
+|------|--------------|
+| Conversation export | Adds an Export page in the side panel for saving accessible DeepSeek conversations as JSON, Markdown, or print-ready HTML. |
+| Archive quality | Export output supports readable and raw modes, with attachment references, names, sizes, status, and message links. |
+| Shell MCP | Windows Shell Host path handling and Chinese command output are more reliable, reducing encoding and command lookup issues. |
+| Test coverage | Adds Vitest unit coverage for request augmentation, MCP transport, memory tools, sync schema, Shell policy, and conversation export. |
+| Release safeguards | The release workflow checks version consistency and confirms Shell Host npm visibility before uploading browser extension assets. |
+
+<details>
+<summary>Show 0.6.1 release highlights</summary>
+
+### 0.6.1 Release Highlights
 
 0.6.1 focuses on automation, Shell MCP, and side-panel organization. It improves scheduled task reliability, local command execution on Windows, and the discoverability of side-panel capabilities.
 
@@ -225,6 +240,8 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Side-panel navigation | Capability-related entries are consolidated into one page, making MCP, tools, Skills, and automation easier to find. |
 | Multilingual docs | The README now includes an English entry point for users who prefer English installation and feature guidance. |
 | Release safeguards | Chrome, Edge, Firefox, and source packages receive stronger checks to reduce missing-asset or version-mismatch release risk. |
+
+</details>
 
 <details>
 <summary>Show 0.6.0 release highlights</summary>

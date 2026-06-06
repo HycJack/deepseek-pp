@@ -27,7 +27,7 @@
   <a href="#功能速览">功能速览</a> ·
   <a href="#适合场景">适合场景</a> ·
   <a href="#安装">安装</a> ·
-  <a href="#061-变更回顾">0.6.1 变更</a>
+  <a href="#062-变更回顾">0.6.2 变更</a>
 </p>
 
 DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的 Chrome / Edge / Firefox 浏览器扩展，提供侧边栏对话、类原生工具调用、内置网络工具、MCP 工具系统、长期记忆、Skill、系统提示词预设、对话导出、Agent 式持续执行和自动化任务。
@@ -39,7 +39,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的 Chrome /
 - [功能速览](#功能速览)
 - [适合场景](#适合场景)
 - [核心功能](#核心功能)
-- [0.6.1 变更回顾](#061-变更回顾)
+- [0.6.2 变更回顾](#062-变更回顾)
 - [安装](#安装)
 - [友情链接](#友情链接)
 
@@ -214,7 +214,22 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
   <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
 </p>
 
-## 0.6.1 变更回顾
+## 0.6.2 变更回顾
+
+0.6.2 是对话导出和跨平台 Shell 体验增强版本，重点让用户可以本地归档 DeepSeek 对话，并提升 Windows 本机命令链路的稳定性。
+
+| 方向 | 主要变化 |
+|------|----------|
+| 对话导出 | 侧边栏新增「导出」页，可把当前账号可访问的 DeepSeek 对话导出为 JSON、Markdown 或可打印 HTML。 |
+| 归档质量 | 导出内容支持可读模式和原始模式，并记录附件引用、文件名、大小、状态和消息关联。 |
+| Shell MCP | Windows Shell Host 的路径解析和中文输出更可靠，减少本机命令执行时的乱码和找不到命令问题。 |
+| 测试保障 | 新增 Vitest 单元测试覆盖请求增强、MCP 传输、记忆工具、同步 schema、Shell policy 和导出流程。 |
+| 发布保障 | Release workflow 会在发布前校验版本一致性，并确认 Shell Host npm 包可见后再上传浏览器扩展资产。 |
+
+<details>
+<summary>展开 0.6.1 变更回顾</summary>
+
+### 0.6.1 变更回顾
 
 0.6.1 是自动化、Shell MCP 和侧边栏整理版本，重点提升定时任务可靠性、本机命令执行体验，以及侧边栏能力入口的可发现性。
 
@@ -225,6 +240,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | 侧边栏导航 | 能力相关入口整合到统一页面，侧边栏结构更清晰，查找 MCP、工具、Skill 和自动化能力更直接。 |
 | 多语言文档 | README 增加英文入口，便于英文用户快速了解安装方式和核心能力。 |
 | 发布保障 | 多浏览器发布包和源码包的校验更完整，降低缺包或版本不一致的发布风险。 |
+
+</details>
 
 <details>
 <summary>展开 0.6.0 变更回顾</summary>
