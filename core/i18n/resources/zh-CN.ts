@@ -204,10 +204,16 @@ export const zhCN = {
       exportJson: '导出 JSON',
     },
     whatsNew: {
-      title: '新功能',
-      projectContext: '项目上下文和可下载产物已可用于 agent 工作流。',
-      interactiveTools: '沙箱确认、Skill 草稿、记忆导入、保存片段和提示词控制已可用。',
-      productSurfaces: '保存项导出、历史组织和代码下载已可用。',
+      title: '版本更新内容',
+      subtitle: '本次重点增强项目上下文、可下载产物、交互式工具和更新可发现性。',
+      versionBadge: 'v{version}',
+      dismiss: '知道了',
+      items: {
+        projectContext: '项目上下文可整理仓库、网页、本地文件和手工说明，并按需加入对话。',
+        interactiveTools: '沙箱确认、Skill 草稿、记忆导入、保存片段和提示词控制让多步任务更可控。',
+        sidepanelChat: '侧边栏对话、右键场景和工具结果恢复继续收敛，刷新后也能保留更完整的执行反馈。',
+        updateNotice: '新版本会在侧边栏提示更新内容，关闭后不再重复打扰。',
+      },
     },
     memoryPage: {
       title: '记忆',

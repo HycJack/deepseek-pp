@@ -43,8 +43,11 @@ for (const removed of removedPaths) {
   }
 }
 
-assertContains('entrypoints/sidepanel/App.tsx', "labelKey: 'app.tabs.automation'");
-assertContains('entrypoints/sidepanel/App.tsx', "import('./pages/AutomationPage')");
+assertContains('entrypoints/sidepanel/App.tsx', "labelKey: 'app.tabs.capabilities'");
+assertContains('entrypoints/sidepanel/App.tsx', "import('./pages/CapabilitiesPage')");
+assertContains('entrypoints/sidepanel/pages/CapabilitiesPage.tsx', "labelKey: 'sidepanel.capabilitiesPage.tabs.automation'");
+assertContains('entrypoints/sidepanel/pages/CapabilitiesPage.tsx', "import AutomationPage from './AutomationPage'");
+assertContains('entrypoints/sidepanel/pages/CapabilitiesPage.tsx', "sub === 'automation' && <AutomationPage />");
 assertContains('entrypoints/sidepanel/pages/AutomationPage.tsx', 'export default function AutomationPage');
 assertContains('core/automation/runner.ts', 'runDeepSeekAutomation');
 assertContains('core/automation/scheduler.ts', 'runAutomation');

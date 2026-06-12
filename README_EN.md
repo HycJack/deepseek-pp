@@ -29,7 +29,7 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#065-release-highlights">0.6.5 Highlights</a>
+  <a href="#070-release-highlights">0.7.0 Highlights</a>
 </p>
 
 ## Product Positioning
@@ -46,7 +46,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [0.6.5 Release Highlights](#065-release-highlights)
+- [0.7.0 Release Highlights](#070-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -265,7 +265,22 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="Automation task side panel">
 </p>
 
-## 0.6.5 Release Highlights
+## 0.7.0 Release Highlights
+
+0.7.0 strengthens project context, interactive tools, and the side-panel workflow, making DeepSeek++ feel more like a browser-based AI agent workspace for sustained work.
+
+| Area | Main changes |
+|------|--------------|
+| Project context | Organize repositories, pages, local files, and manual notes as reusable project material, then attach only what a task needs. |
+| Downloadable artifacts | DeepSeek++ can create single-file outputs or project bundles for scripts, Markdown, JSON, HTML, and small project structures. |
+| Interactive tools | Sandbox approvals, Skill drafts, memory import, saved snippets, and prompt controls make multi-step work easier to review and steer. |
+| Side-panel chat | Side-panel chat, right-click scenarios, official API Key setup, and restored tool results keep execution feedback clearer after refresh. |
+| Update notice | New releases now surface a side-panel summary, and dismissed notices stay dismissed per version. |
+
+<details>
+<summary>Show 0.6.5 release highlights</summary>
+
+### 0.6.5 Release Highlights
 
 0.6.5 focuses on bilingual runtime polish and output feedback accuracy. DeepSeek++ now keeps Chinese or English workflows more consistent across the extension while making the live output-speed indicator better match actual generation.
 
@@ -278,6 +293,8 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Release safeguards | Adds multilingual coverage checks while continuing compile, unit test, MCP, automation, prompt freeze, cross-browser packaging, workflow, and asset validation. |
 
 Thanks to this release's contributor: [@mekos2772](https://github.com/mekos2772) for fixing Token output speed estimation accuracy.
+
+</details>
 
 <details>
 <summary>Show 0.6.4 release highlights</summary>

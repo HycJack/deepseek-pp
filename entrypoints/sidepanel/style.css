@@ -226,10 +226,116 @@ input[type='range'] {
 }
 
 .ds-app-main {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   background: var(--ds-bg);
+}
+
+.ds-whats-new-popover {
+  position: fixed;
+  top: 56px;
+  right: 12px;
+  left: 12px;
+  z-index: 40;
+  pointer-events: none;
+  animation: slideDown 0.22s ease-out;
+}
+
+.ds-whats-new-panel {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px;
+  border: 1px solid var(--ds-selected-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ds-card) 94%, var(--ds-blue-light));
+  box-shadow: var(--ds-shadow-lg);
+  pointer-events: auto;
+}
+
+.ds-whats-new-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ds-whats-new-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--ds-selected-border);
+  border-radius: 999px;
+  color: var(--ds-blue);
+  background: var(--ds-blue-light);
+  font-size: 10px;
+  font-weight: 680;
+  line-height: 1;
+}
+
+.ds-whats-new-title {
+  margin: 8px 0 0;
+  color: var(--ds-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.ds-whats-new-subtitle {
+  margin: 5px 0 0;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ds-whats-new-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ds-whats-new-item {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  align-items: start;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ds-whats-new-marker {
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--ds-blue);
+  box-shadow: 0 0 0 3px var(--ds-blue-glow);
+}
+
+.ds-whats-new-dismiss {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 13px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ds-text-on-primary);
+  background: var(--ds-blue);
+  box-shadow: var(--ds-blue-shadow);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.ds-whats-new-dismiss:hover {
+  background: var(--ds-blue-hover);
+  transform: translateY(-1px);
 }
 
 /* Top tabs */

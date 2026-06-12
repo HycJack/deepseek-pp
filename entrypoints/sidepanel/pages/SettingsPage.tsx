@@ -18,7 +18,6 @@ import PageIntro from '../components/PageIntro';
 import PromptControlPanel from '../components/PromptControlPanel';
 import ScenarioManager from '../components/ScenarioManager';
 import VoiceSettingsPanel from '../components/VoiceSettingsPanel';
-import WhatsNewPanel from '../components/WhatsNewPanel';
 import { useI18n } from '../i18n';
 
 const DEFAULT_SYNC_CONFIG: SyncConfig = {
@@ -496,8 +495,6 @@ export default function SettingsPage() {
 
   return (
     <div className="p-4 space-y-5">
-      <WhatsNewPanel />
-
       <PageIntro
         title={t('sidepanel.settings.title')}
         description={t('sidepanel.settings.description')}

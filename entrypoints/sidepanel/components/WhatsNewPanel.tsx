@@ -1,42 +1,68 @@
 import { useEffect, useState } from 'react';
-import { dismissWhatsNew, shouldShowWhatsNew, WHATS_NEW_ITEMS } from '../../../core/whats-new';
+import { dismissWhatsNew, getWhatsNewState, WHATS_NEW_ITEMS, type WhatsNewState } from '../../../core/whats-new';
 import { useI18n } from '../i18n';
 
 export default function WhatsNewPanel() {
   const { t } = useI18n();
-  const [visible, setVisible] = useState(false);
+  const [state, setState] = useState<WhatsNewState | null>(null);
 
   useEffect(() => {
-    shouldShowWhatsNew().then(setVisible).catch(() => setVisible(false));
+    getWhatsNewState()
+      .then(setState)
+      .catch((error) => {
+        console.error('Failed to load whats-new state', error);
+        setState(null);
+      });
   }, []);
 
-  if (!visible) return null;
+  if (!state?.visible) return null;
+
+  const handleDismiss = () => {
+    setState((current) => current ? { ...current, visible: false, pendingUpdate: false } : current);
+    dismissWhatsNew()
+      .then(() => chrome.runtime.sendMessage({ type: 'WHATS_NEW_DISMISSED' }))
+      .catch((error) => {
+        console.error('Failed to dismiss whats-new panel', error);
+      });
+  };
 
   return (
-    <section className="ds-surface-panel rounded-xl p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          {t('sidepanel.whatsNew.title')}
-        </h2>
+    <section
+      className="ds-whats-new-popover"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="ds-whats-new-title"
+    >
+      <div className="ds-whats-new-panel">
+        <div className="ds-whats-new-header">
+          <div>
+            <div className="ds-whats-new-kicker">
+              {t('sidepanel.whatsNew.versionBadge', { version: state.version })}
+            </div>
+            <h2 id="ds-whats-new-title" className="ds-whats-new-title">
+              {t('sidepanel.whatsNew.title')}
+            </h2>
+            <p className="ds-whats-new-subtitle">
+              {t('sidepanel.whatsNew.subtitle')}
+            </p>
+          </div>
+        </div>
+        <ul className="ds-whats-new-list">
+          {WHATS_NEW_ITEMS.map((item) => (
+            <li key={item.id} className="ds-whats-new-item">
+              <span className="ds-whats-new-marker" aria-hidden="true" />
+              <span>{t(item.titleKey)}</span>
+            </li>
+          ))}
+        </ul>
         <button
           type="button"
-          className="text-[11px] px-2 py-1 rounded-md"
-          style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}
-          onClick={() => {
-            setVisible(false);
-            void dismissWhatsNew();
-          }}
+          className="ds-whats-new-dismiss"
+          onClick={handleDismiss}
         >
-          {t('common.close')}
+          {t('sidepanel.whatsNew.dismiss')}
         </button>
       </div>
-      <ul className="space-y-1.5">
-        {WHATS_NEW_ITEMS.map((item) => (
-          <li key={item.id} className="text-xs leading-relaxed" style={{ color: 'var(--ds-text-secondary)' }}>
-            {t(item.titleKey)}
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

@@ -18,7 +18,7 @@ beforeEach(() => {
 
   vi.stubGlobal('chrome', {
     runtime: {
-      getManifest: vi.fn(() => ({ version: '0.6.5' })),
+      getManifest: vi.fn(() => ({ version: '0.7.0' })),
       sendMessage: vi.fn(async (message: { type?: string }) => {
         if (message.type === 'GET_AUTH_STATUS') return { available: true, provider: 'deepseek-web' };
         if (message.type === 'GET_VOICE_SETTINGS') return {};

@@ -92,6 +92,11 @@ import {
 import type { SandboxExecutionResult, SandboxRunRequest, SandboxToolRuntime } from '../core/sandbox';
 import { getCurrentBrowserExtensionEnvironment } from '../core/platform';
 import {
+  dismissWhatsNew,
+  hasPendingWhatsNew,
+  markWhatsNewPending,
+} from '../core/whats-new';
+import {
   createMcpServer,
   deleteMcpServer,
   getAllMcpServers,
@@ -200,6 +205,11 @@ type SidePanelApi = {
   setPanelBehavior?: (options: { openPanelOnActionClick: boolean }) => Promise<void>;
 };
 
+type ActionApi = {
+  setBadgeText?: (details: { text: string }) => Promise<void> | void;
+  setBadgeBackgroundColor?: (details: { color: string }) => Promise<void> | void;
+};
+
 type SyncDataSnapshot = {
   memories: Omit<Memory, 'id'>[];
   skills: Skill[];
@@ -211,6 +221,7 @@ type SyncDataSnapshot = {
 
 export default defineBackground(() => {
   enableSidePanelActionClick();
+  registerWhatsNewInstallListener();
   registerAutomationAlarmListener();
   refreshBackgroundLocale()
     .then(() => createContextMenus())
@@ -227,6 +238,7 @@ export default defineBackground(() => {
 
   archiveStaleMemories().catch((error) => reportBackgroundStartupError('archive_stale_memories_failed', error));
   ensureShellMcpPreset().catch((error) => reportBackgroundStartupError('shell_mcp_preset_failed', error));
+  refreshWhatsNewBadge().catch((error) => reportBackgroundStartupError('whats_new_badge_failed', error));
   ensureAutomationWakeAlarm().catch((error) => reportBackgroundStartupError('automation_alarm_create_failed', error));
   scanDueAutomationsFromWake().catch((error) => reportBackgroundStartupError('automation_startup_scan_failed', error));
 
@@ -264,6 +276,27 @@ function enableSidePanelActionClick() {
   const sidePanel = (chrome as typeof chrome & { sidePanel?: SidePanelApi }).sidePanel;
   sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true })
     .catch((error) => reportBackgroundStartupError('sidepanel_behavior_failed', error));
+}
+
+function registerWhatsNewInstallListener() {
+  chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason !== 'update') return;
+
+    markWhatsNewPending(details.previousVersion ?? null)
+      .then(() => refreshWhatsNewBadge())
+      .catch((error) => reportBackgroundStartupError('whats_new_update_failed', error));
+  });
+}
+
+async function refreshWhatsNewBadge() {
+  const action = (chrome as typeof chrome & { action?: ActionApi }).action;
+  if (!action?.setBadgeText) return;
+
+  const showBadge = await hasPendingWhatsNew();
+  await action.setBadgeText({ text: showBadge ? 'NEW' : '' });
+  if (showBadge && action.setBadgeBackgroundColor) {
+    await action.setBadgeBackgroundColor({ color: '#4D6BFE' });
+  }
 }
 
 async function createContextMenus() {
@@ -794,6 +827,12 @@ async function handleMessage(
 
     case 'GET_CONFIG':
       return { version: getExtensionVersion() };
+
+    case 'WHATS_NEW_DISMISSED': {
+      await dismissWhatsNew();
+      await refreshWhatsNewBadge();
+      return { ok: true };
+    }
 
     case 'GET_DEEPSEEK_API_KEY_STATUS':
       return { ok: true, configured: await hasDeepSeekApiKey() };

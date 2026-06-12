@@ -205,9 +205,15 @@ export const en = {
     },
     whatsNew: {
       title: "What's new",
-      projectContext: 'Project context and downloadable artifacts are available for agent workflows.',
-      interactiveTools: 'Sandbox approvals, Skill drafts, memory import, saved snippets, and prompt controls are ready.',
-      productSurfaces: 'Saved-item export, history organization, and code downloads are available.',
+      subtitle: 'This release strengthens project context, downloadable artifacts, interactive tools, and update discoverability.',
+      versionBadge: 'v{version}',
+      dismiss: 'Got it',
+      items: {
+        projectContext: 'Project context can organize repositories, pages, local files, and manual notes, then attach them only when useful.',
+        interactiveTools: 'Sandbox approvals, Skill drafts, memory import, saved snippets, and prompt controls make multi-step work easier to steer.',
+        sidepanelChat: 'Side-panel chat, right-click scenarios, and restored tool results keep execution feedback more complete after refresh.',
+        updateNotice: 'New releases now surface a side-panel update summary that stays dismissed after you close it.',
+      },
     },
     memoryPage: {
       title: 'Memory',

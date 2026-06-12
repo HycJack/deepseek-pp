@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { LocaleMessageKey } from '../../core/i18n';
 import { getChatEnabled } from '../../core/chat/store';
+import WhatsNewPanel from './components/WhatsNewPanel';
 import { useI18n } from './i18n';
 import { setPendingText } from './pending-text';
 
@@ -100,6 +101,7 @@ export default function App() {
       </nav>
 
       <main className="ds-app-main">
+        <WhatsNewPanel />
         <Suspense fallback={<div className="p-4 text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>{t('common.loading')}</div>}>
           {tab === 'chat' && <ChatPage />}
           {tab === 'library' && (
