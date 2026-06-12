@@ -91,8 +91,27 @@ jobs:
             exit 1
           fi
 
-          PUBLISHED_VERSION="$(npm view "deepseek-pp-shell-host@$VERSION" version 2>/dev/null || true)"
-          if [ "$PUBLISHED_VERSION" = "$VERSION" ]; then
+          read_published_version() {
+            npm view "deepseek-pp-shell-host@$VERSION" version --prefer-online 2>/dev/null || true
+          }
+
+          wait_for_published_version() {
+            local attempts="$1"
+            local attempt
+            PUBLISHED_VERSION=""
+            for attempt in $(seq 1 "$attempts"); do
+              PUBLISHED_VERSION="$(read_published_version)"
+              if [ "$PUBLISHED_VERSION" = "$VERSION" ]; then
+                return 0
+              fi
+              if [ "$attempt" -lt "$attempts" ]; then
+                sleep 5
+              fi
+            done
+            return 1
+          }
+
+          if wait_for_published_version 1; then
             echo "deepseek-pp-shell-host@$VERSION is already published"
             exit 0
           fi
@@ -103,8 +122,7 @@ jobs:
           fi
 
           npm publish --workspace packages/shell-host --access public
-          PUBLISHED_VERSION="$(npm view "deepseek-pp-shell-host@$VERSION" version 2>/dev/null || true)"
-          if [ "$PUBLISHED_VERSION" != "$VERSION" ]; then
+          if ! wait_for_published_version 12; then
             echo "npm publish completed but registry does not expose deepseek-pp-shell-host@$VERSION" >&2
             exit 1
           fi
