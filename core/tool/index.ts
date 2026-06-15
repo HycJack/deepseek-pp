@@ -74,6 +74,15 @@ export {
 } from '../memory/import-tool';
 
 export {
+  BROWSER_CONTROL_TOOL_NAMES,
+  BROWSER_CONTROL_PROVIDER,
+  createBrowserControlToolDescriptors,
+  executeBrowserControlToolCall,
+  isBrowserControlToolName,
+  type BrowserControlToolName,
+} from '../browser-control/tool';
+
+export {
   DEFAULT_TOOL_DESCRIPTORS,
   createDefaultToolDescriptors,
   createToolCallFromInvocation,

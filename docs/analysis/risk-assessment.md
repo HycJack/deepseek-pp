@@ -4,110 +4,136 @@
 
 | Principle | Status | Key Findings | Transformation Priority |
 |:--|:--|:--|:--|
-| **S** Single Purpose | 🟡 | Core modules are mostly focused, but `entrypoints/content.ts`, `core/interceptor/fetch-hook.ts`, `SettingsPage.tsx`, and `McpPage.tsx` are already large convergence points. | High |
-| **U** Unidirectional Flow | 🟡 | Runtime generally flows MAIN world -> content -> core -> background, but mutable hook state and broad content responsibilities make feature additions risky. | High |
-| **P** Ports over Implementation | 🟡 | ToolDescriptor/MCP/export schemas are good ports. Android, bridge messages, project-file context, saved items, and sandbox execution do not exist as contracts yet. | High |
-| **E** Environment-Agnostic | 🔴 | Current product is WebExtension-first. Native messaging, sidePanel, downloads, storage, and DOM assumptions are not Android-ready. | Critical |
-| **R** Replaceable Parts | 🟡 | Tool providers and MCP transports are replaceable; platform/runtime/UI entrypoints are not yet cleanly replaceable for Android or sandboxed artifacts. | High |
+| **S** Single Purpose | 🔴 | `entrypoints/content.ts`, `entrypoints/background.ts`, and `core/interceptor/fetch-hook.ts` are large coordination hubs. Browser control would make them worse if implemented inline. | Critical |
+| **U** Unidirectional Flow | 🔴 | Manual chat, inline agent, sidepanel chat, and automation each have tool paths. Browser-control must converge through the existing runtime provider contract. | Critical |
+| **P** Ports over Implementation | 🟡 | `ToolDescriptor` is usable, but CDP session, controlled tab, AX UID snapshot, browser action result, and permission state schemas do not exist yet. | High |
+| **E** Environment-Agnostic | 🔴 | `chrome.debugger` and CDP are Chromium-specific. Firefox and Android must be explicit unsupported states, not hidden fallbacks. | Critical |
+| **R** Replaceable Parts | 🟡 | `core/platform` is a useful capability layer, but it lacks `browserControl`, `debugger`, `tabs`, `tabGroups`, and `accessibilityTree` capabilities. | High |
 
-**Overall Health**: 0/5 fully healthy for this transformation target — refactoring needed before large feature porting.
+**Overall Health**: 0/5 principles healthy for this transformation. This is a technical-debt alert unless the implementation first establishes clean contracts and a dedicated browser-control service.
 
 ## S.U.P.E.R Violation Hotspots
 
-1. `entrypoints/content.ts`: too many DOM/runtime responsibilities; Android and new inline cards will make it harder to reason about.
-2. `core/interceptor/fetch-hook.ts`: critical and large; new output tags or stream behavior must be added through explicit contracts.
-3. `entrypoints/sidepanel/pages/SettingsPage.tsx` and `McpPage.tsx`: large UI pages; new settings should not be appended indefinitely.
-4. Platform APIs: WebExtension APIs are assumed directly in runtime, storage, sidepanel, native messaging, and downloads.
-5. Model-facing tool syntax: DeepSeek++ has one XML/JSON ToolDescriptor path; Better DeepSeek has BDS tags. Supporting both naively would create a second source of truth.
-
-## Better DeepSeek Gap Matrix
-
-| Capability | Better DeepSeek evidence | DeepSeek++ status | Priority | Recommended mapping |
-|:--|:--|:--|:--|:--|
-| Android WebView app | `android/`, `build:android`, Android bridge/polyfills/tests | Not supported | P0 | Add platform abstraction + Android host; keep browser extension path unchanged |
-| Advanced attach menu: folder upload, GitHub repo import, web fetch | `src/content/ui/AttachMenu.svelte`, `files/github-reader.js`, `folder-reader.js` | Partial: web fetch exists; GitHub Skill import exists, not repo context; no folder/project upload | P0 | Build Project Context feature with file/GitHub/web sources and explicit persisted schemas |
-| Project mode + local RAG | `project-manager.js`, `rag-engine.js`, Projects UI | Not supported | P0 | Add Projects/ProjectFiles store, BM25-style retrieval, prompt injection budget controls |
-| Generated files + LONG_WORK zip | `BDS:create_file`, `BDS:LONG_WORK`, `files/long-work.js` | Not supported | P0 | Add artifact tool provider and content cards; use existing tool parser/contracts, not BDS tags |
-| Rich inline cards: HTML/visualizer/PPTX/Excel/DOCX | parser/tool cards/sandbox | Partial via OfficeCLI skill/Shell; no browser-side generated artifact cards | P1 | Start with file/artifact cards, then optionally office/browser sandbox |
-| Browser sandbox code runner | `AUTO:CODE_RUNNER`, `CodeRunner`, sandbox iframe | Partial: Shell/Python native host exists, but no browser sandbox or Android-compatible runner | P1 | Add isolated sandbox local tool with strict output limits and explicit timeout handling |
-| Voice STT/TTS | README and settings | Not supported | P1 | Add optional Web Speech API surface for browser; Android bridge later |
-| Saved items/bookmarks/snippets | `SavedItems.svelte`, snippets | Not supported | P1 | Add saved item/snippet store and prompt insertion UX |
-| Chat tags/filtering/history search | sidebar injectors/tag modules | Not supported | P1 | Requires DeepSeek sidebar DOM adapter; keep separate from official export |
-| Memory import from another AI | memory import prompts and UI | Partial: memory import/export JSON exists; no cross-AI import workflow | P1 | Add import assistant flow that creates typed DeepSeek++ memories |
-| Skill creator tool | `BDS:skill_create`, Skill card | Partial: custom/GitHub skills exist; no AI-created skill capture card | P1 | Add structured `skill_create` local tool writing to existing Skill registry after user review |
-| Prompt injection controls | always/first/every X, disable prompt/memory, force language | Partial: presets and fixed reinjection interval; no user-configurable cadence/disable memory | P1 | Extend preset/settings contracts; preserve prompt-freeze |
-| Export images/specific messages | Better export UI | Partial: official full/current export to HTML/Markdown/PDF | P2 | Add message-level and image artifact after export UX redesign |
-| API playground | `api-playground/*` | Not supported | P2 | Sidepanel developer tool; use stored API key boundary |
-| Server status checker | `status-monitor.js`, status banner | Not supported | P2 | Optional operational UI, not core agentic capability |
-| Announcement/what's-new | remote config/banner/modal | Not supported | P2 | Avoid remote announcements by default unless product policy is agreed |
-| Custom CSS/theme presets | custom CSS settings | Not supported | P2 | Low strategic value; may conflict with stable DeepSeek DOM |
-| Native navigation patch/code block downloads | README/changelog | Not supported | P2 | Small UX tasks after higher-value agent features |
-
-## Priority Recommendation
-
-The best sequence is not to copy Better DeepSeek feature-by-feature. DeepSeek++ already has a stronger agentic spine through ToolDescriptor, MCP, Shell, automation, export, and i18n. The highest return is to add missing user-facing workflows on top of those contracts:
-
-1. **P0 Android and platform ports**: create the seams needed for WebView, storage, downloads, file picking, asset URLs, and runtime injection.
-2. **P0 project context ingestion**: folder/GitHub/web sources, persisted projects/files, retrieval, prompt budget integration.
-3. **P0 generated artifact delivery**: model-created files, multi-file project zip, download cards, and artifact persistence.
-4. **P1 sandbox and interaction upgrades**: code runner, skill creator, memory import, saved snippets, voice.
-5. **P2 polish/secondary surfaces**: API playground, image export, status/what's-new, custom CSS, navigation/codeblock UX.
+| Hotspot | Evidence | Required Mitigation |
+|:--|:--|:--|
+| `entrypoints/content.ts` | Handles page bridge, tool card UI, export, inline agent, theme, pet, local artifact fast path | Do not add CDP/session state here. Limit content changes to rendering and existing tool-call forwarding. |
+| `entrypoints/background.ts` | Handles runtime RPC, automation, sidepanel chat, MCP, offscreen sandbox, sync, broadcasts | Own the service instance, but delegate implementation to `core/browser-control/*`. |
+| `core/interceptor/fetch-hook.ts` | Streaming parser previously had large-payload freeze risk | Only expose descriptors and parse calls. No full snapshot injection into streamed visible text. |
+| `core/inline-agent/loop.ts` + content gating | Existing inline agent continuation policy does not automatically include browser tools | Add explicit browser-control provider eligibility and tests across all trigger sources. |
+| `scripts/manifest-policy-check.mjs` | Permission list is hard-coded | Update manifest policy checks, CWS docs checks, and platform compatibility expectations together. |
 
 ## Risk Matrix
 
 | Risk | Impact | Likelihood | Severity | Mitigation |
 |:--|:--|:--|:--|:--|
-| Android work spreads WebView conditionals through browser runtime | High | High | Critical | Add `core/platform` contracts first; browser and Android implementations behind adapters |
-| Parallel BDS tag syntax competes with ToolDescriptor XML/JSON syntax | High | Medium | High | Normalize new tools into current invocation catalog; support aliases only through descriptor metadata |
-| Generated artifact/code-runner features introduce unsafe execution/download paths | High | Medium | High | Require explicit user approval, sandbox isolation, size limits, MIME allowlists, and tests |
-| Project context injection bloats prompts and conflicts with memory/preset/Skill order | High | High | High | Add retrieval budget, ordering contract, and prompt-freeze tests |
-| GitHub/folder import stores secrets or huge files in sync | High | Medium | High | Explicit schema: source metadata syncable, file contents opt-in, tokens excluded |
-| Android validation is overstated without local SDK/emulator | Medium | High | High | Separate web-bundle tests, Kotlin unit tests, Gradle assemble, and emulator smoke; report missing toolchain honestly |
-| DeepSeek DOM changes break attach/menu/sidebar injections | Medium | High | Medium | Keep DOM adapters narrow and covered by fixtures/e2e |
-| UI pages become unmaintainable | Medium | Medium | Medium | Add focused feature pages/components; avoid adding everything to Settings |
+| `debugger` permission trust and Web Store review risk | High | High | Critical | Make Browser Control explicit, user-visible, auditable, and documented; consider channel gating if CWS posture requires it. |
+| Firefox / Android incompatibility | High | Certain | Critical | Capability-gate descriptors and UI; return explicit unsupported errors. |
+| Snapshot payload freezes or history pollution | High | High | Critical | Hard node/byte/time budgets; store or return pruned snapshot observations; never persist massive AX trees in history. |
+| Multiple tool-loop behavior divergence | High | High | Critical | One local provider used by manual chat, sidepanel chat, inline agent, and automation. |
+| Controlled tab target confusion | Medium | High | High | Background-owned controlled tab registry with owner/run id and tab group metadata. |
+| CDP detach and restricted URL errors | Medium | High | High | Structured errors; no silent success; user-visible detach state. |
+| Action tools mutate unintended pages | High | Medium | High | Scope every action to locked tab/group; require fresh snapshot UID; stale UID errors. |
+| Weak validation surface | Medium | High | High | Add unit tests, manifest policy tests, and a real Chrome smoke fixture. |
 
 ## High-Severity Risks
 
-### Android Platform Boundary
+### Sensitive Browser Permissions
 
-Android is valuable, but it is not just another WXT target. Better DeepSeek has a native Kotlin WebView host, a JavaScript bridge, Android file/folder pickers, native downloads, WebViewAssetLoader, cookie handling, theme/status-bar sync, and tests. DeepSeek++ must first define platform ports for storage, runtime messages, downloads, file picking, asset URLs, and injected bundles. Without that, Android support would become a fork of the extension runtime.
+Official Chrome documentation confirms `chrome.debugger` requires the `debugger` manifest permission, and `chrome.tabGroups` requires `tabGroups` in MV3. This is not a normal optional cosmetic permission; it is central to user trust and review posture.
 
-### Tool Syntax and Prompt Contract
+Mitigation:
 
-Better DeepSeek relies on many `<BDS:...>` tags. DeepSeek++ already has model-facing ToolDescriptor prompts, XML-like tool tags with JSON payloads, prompt-freeze validation, MCP descriptors, and tool-card rendering. Adding raw BDS tags would duplicate parsing, validation, execution policy, and UI rendering. The safer plan is to expose new features as DeepSeek++ local tools and optional aliases only where compatibility is intentional.
+- Add only to Chromium targets.
+- Document every new permission in privacy policy and submission notes.
+- Provide a sidepanel Browser Control page with state, explicit detach, and action history.
+- Keep unsupported Firefox/Android states explicit.
 
-### Generated Artifacts and Code Execution
+### Snapshot Size, Privacy, And Freeze Regression
 
-Client-side PPTX/Excel/DOCX generation and browser code execution are high-value but high-risk. They execute user/model-provided code in a browser context and create downloadable artifacts. These must be designed with explicit approval, sandboxing, output limits, MIME/path validation, and no silent success paths.
+Browser control depends on page observation. Accessibility Tree and DOM-related snapshots can be large and may contain sensitive page text. The project already has memory of severe artifact-heavy freeze risk caused by large tool payload streaming and cross-boundary copying.
 
-### Project Context and RAG
+Mitigation:
 
-Project files, folder imports, GitHub repo fetch, and RAG search are likely to become a major differentiator. They also introduce storage size, sync, privacy, prompt budget, and ordering concerns. This should be a first-class `Project Context` module, not a side effect of the existing Skill import UI.
+- Define `BrowserSnapshot` with `snapshotId`, `nodes`, `truncated`, `budget`, and `summary`.
+- Hard-limit default node count and serialized bytes.
+- Keep full debug snapshots out of `ToolResult.output` unless explicitly requested and budgeted.
+- Add large snapshot tests before shipping.
+
+### Tool-Loop Fragmentation
+
+Browser-control tools must be reachable consistently from:
+
+- manual DeepSeek page chat
+- inline agent continuation
+- sidepanel chat
+- automation runner
+
+Mitigation:
+
+- Add browser-control as a local provider under `core/tool/runtime.ts`.
+- Use `ToolDescriptor.annotations.capability = "browser_control"` for policy.
+- Add trigger-source behavior tests.
+
+### Platform Compatibility
+
+Firefox and Android WebView cannot be treated as degraded browser-control platforms. Android bridge currently does not expose extension APIs; Firefox does not provide Chrome CDP debugger parity in this project.
+
+Mitigation:
+
+- Add platform capabilities: `tabs`, `tabGroups`, `debugger`, `browserControl`, `accessibilityTree`.
+- Do not include browser-control descriptors on unsupported platforms.
+- Surface unavailable state in sidepanel.
 
 ## Technical Debt
 
-- Large content/interceptor files make new DOM cards and platform behavior risky.
-- Runtime bridge messages lack schema validation.
-- Prompt augmentation order is implicit and will need an explicit contract once project context joins memory/preset/Skill/tool instructions.
-- Current export is strong for official data but not for message-level/saved-item workflows.
-- No Android or e2e browser harness exists.
+- Background and content entrypoints are already large. Browser control must not add another large inline block.
+- `MessageAction` is a broad central union with little runtime validation.
+- Tool execution history truncates outputs, which is incompatible with raw AX snapshot storage.
+- Existing active spec files were stale relative to archived completion; this run replaces active spec surfaces with browser-control parity artifacts.
 
 ## Testing Risks
 
-- Android needs at least four layers: pure TypeScript platform-adapter tests, Android bridge unit tests, Gradle assemble, and emulator/WebView smoke. Missing local SDK/Gradle must be reported as a validation gap.
-- Prompt/tool changes must update `prompt:freeze` intentionally.
-- File ingestion and RAG require fixtures for binary filtering, size limits, `.gitignore`, branch fallback, private repo token errors, and prompt budget behavior.
-- Artifact/code-runner features require sandbox execution, timeout, and output-limit tests before release.
+Existing quality gates are strong for packaging and current feature behavior:
+
+- `npm test`
+- `npm run compile`
+- `npm run prompt:freeze`
+- `npm run verify:i18n`
+- `npm run verify:manifest-policy`
+- `npm run ci:quality`
+
+Required additions:
+
+- CDP connection tests with stubbed `chrome.debugger`
+- tab lifecycle and tab group tests
+- AX snapshot formatter and stale UID tests
+- input action tests for click, hover, fill, key, file attach
+- unsupported platform tests
+- manifest policy tests for new permissions/docs
+- real Chrome smoke test on a fixture page
 
 ## Project Governance Risks
 
-- `AGENTS.md` is auto-generated; durable future-agent rules should go through the sync source/native memory instead of hand-editing the generated file.
-- This run uses Codex native memory as the durable surface; no repo-local fallback memory is selected.
-- Previous spec artifacts were complete but unarchived at session start; they were archived before this new run to avoid competing `docs/analysis`, `docs/plan`, and `docs/progress` truth sources.
+| Risk | Status | Mitigation |
+|:--|:--|:--|
+| Active old spec docs were stale | `docs/archives/better-deepseek-capability-adoption/` has archive copy | Replace active `docs/analysis`, `docs/plan`, `docs/progress` with this run |
+| `AGENTS.md` is generated | Root file warns to edit Claude project memory instead | Do not hand-edit for this run unless a rule must become shared |
+| Durable memory surface | Codex native memory exists | Use native memory for durable lessons; do not create repo fallback |
+| GitHub mode | `gh` authenticated with repo scope; project scope missing | Use `GITHUB_STANDARD` |
 
 ## Compatibility Concerns
 
-- Browser stores may reject remote-code-like behavior if sandbox generation is not packaged and documented carefully.
-- Android WebView cannot rely on extension APIs, native messaging, sidePanel, or desktop downloads.
-- WebDAV sync must not copy GitHub tokens, API keys, local file contents, or Android-only transient data unless explicitly designed.
-- Existing users' memories, skills, presets, MCP servers, automations, and exports must migrate without schema loss.
+- Chromium: target platform for full browser control.
+- Edge: likely shares Chromium extension APIs, but still validate build and API availability.
+- Firefox: build must omit or hard-disable browser control.
+- Android WebView: build must show unsupported; no fake tool success.
+- Chrome Web Store: permission documentation and privacy policy must be updated before release.
+
+## Verified External Baseline
+
+Current official docs checked on 2026-06-14:
+
+- Chrome `debugger` API requires declaring `debugger` in the manifest.
+- Chrome optional permissions are recommended for optional features when possible.
+- Chrome `tabGroups` is Chrome 89+ / MV3+ and requires `tabGroups`.
+- Chrome Web Store program policies emphasize trustworthy, safe extensions and review of permissions.

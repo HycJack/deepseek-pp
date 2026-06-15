@@ -72,7 +72,7 @@ Productivity
 ### Single Purpose
 
 ```text
-Enhance the DeepSeek web chat experience with English and Simplified Chinese UI, user-controlled memory, Skills, project context, saved snippets, prompt presets, MCP tool execution, local exports, downloadable artifacts, and scheduled automation inside chat.deepseek.com.
+Enhance the DeepSeek web chat experience with English and Simplified Chinese UI, user-controlled memory, Skills, project context, saved snippets, prompt presets, MCP tool execution, browser control tools, local exports, downloadable artifacts, and scheduled automation inside chat.deepseek.com.
 ```
 
 ### Data Type Disclosures
@@ -125,6 +125,24 @@ Connects to a user-configured local Native Messaging host for local MCP tools. T
 Creates an invisible extension document for isolated JavaScript, TypeScript, Python, and HTML sandbox runs. This keeps sandbox execution outside chat.deepseek.com so long-running or timed-out code cannot block the visible DeepSeek chat page.
 ```
 
+#### `debugger`
+
+```text
+Enables the optional Browser Control feature. When the user enables Browser Control, DeepSeek++ attaches to the selected browser tab to read an Accessibility Tree snapshot and perform visible browser actions requested through browser_* tools. Users can disable Browser Control or detach from the selected tab in the side panel.
+```
+
+#### `tabs`
+
+```text
+Lists browser tabs and lets the user choose which tab Browser Control should operate on. Tab titles and URLs are shown only in the extension side panel and returned as browser-control tool context when the user enables the feature.
+```
+
+#### `tabGroups`
+
+```text
+Shows browser tab group metadata in the Browser Control target selector so users can identify the intended controlled tab.
+```
+
 #### `sidePanel`
 
 ```text
@@ -172,7 +190,8 @@ Use this reviewer note:
 6. Send a DeepSeek message that uses the saved memory/Skill. The extension should use the selected language for extension UI while preserving the user-authored memory/Skill text.
 7. In a DeepSeek conversation, use the DeepSeek++ export button next to the official reply actions such as copy and share. The extension should show format choices, default to HTML, and save the selected current-conversation export formats locally.
 8. In the side panel, create a saved snippet and insert it into chat, then export saved items as Markdown or JSON.
-9. Optional MCP/WebDAV/native messaging features require user-provided endpoints or a user-installed local Shell host and are disabled until configured by the user.
+9. In Capabilities > Browser, enable Browser Control, choose a normal web tab, and verify the page shows a selected target. Browser Control can be disabled or detached from the same page.
+10. Optional MCP/WebDAV/native messaging features require user-provided endpoints or a user-installed local Shell host and are disabled until configured by the user.
 ```
 
 No test account is included because the extension works with the reviewer's own DeepSeek session.

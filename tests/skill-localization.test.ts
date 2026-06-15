@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BUILTIN_SKILLS, getLocalizedBuiltinSkills } from '../core/skill/builtin';
-import { getAllSkills } from '../core/skill/registry';
+import { getAllSkills, setSkillEnabled } from '../core/skill/registry';
 import type { Skill } from '../core/types';
 
 const SKILL_STORAGE_KEY = 'deepseek_pp_skills';
@@ -76,13 +76,32 @@ describe('builtin skill localization', () => {
     expect(englishShell.description).toContain('Local command-line assistant');
   });
 
-  it('leaves OfficeCLI official skills out of builtin translation scope', () => {
+  it('leaves OfficeCLI third-party skills out of builtin translation scope and disabled by default', () => {
     const english = findSkill(getLocalizedBuiltinSkills('en'), 'officecli-styles');
     const chinese = findSkill(getLocalizedBuiltinSkills('zh-CN'), 'officecli-styles');
 
-    expect(english.source).toBe('official');
+    expect(english.source).toBe('third-party');
+    expect(english.enabled).toBe(false);
     expect(english.description).toBe(chinese.description);
     expect(english.instructions).toBe(chinese.instructions);
+  });
+
+  it('keeps bundled third-party skills out of the active list until explicitly enabled', async () => {
+    expect((await getAllSkills()).some((skill) => skill.name === 'officecli')).toBe(false);
+
+    const libraryOfficeCli = findSkill(await getAllSkills({ includeDisabled: true }), 'officecli');
+    expect(libraryOfficeCli.source).toBe('third-party');
+    expect(libraryOfficeCli.enabled).toBe(false);
+
+    await setSkillEnabled('officecli', true);
+
+    const activeOfficeCli = findSkill(await getAllSkills(), 'officecli');
+    expect(activeOfficeCli.source).toBe('third-party');
+    expect(activeOfficeCli.enabled).toBe(true);
+  });
+
+  it('does not treat first-party builtin skills as locally toggleable', async () => {
+    await expect(setSkillEnabled('shell', false)).rejects.toThrow('Skill cannot be enabled or disabled');
   });
 
   it('keeps custom and remote skills exactly as authored while localizing builtins', async () => {

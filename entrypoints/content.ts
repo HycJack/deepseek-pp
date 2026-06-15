@@ -1736,13 +1736,15 @@ function startInlineAgentIfNeeded(
   executions: ToolExecutionRecord[],
 ): void {
   // Collect executions that should trigger a continuation:
-  // MCP tools + local web search tools (web_search, web_fetch)
+  // MCP tools + local web and browser-control tools.
   const continuableExecutions = executions.filter(
     (e) =>
       e.provider?.kind === 'mcp' ||
       e.provider?.id === 'web' ||
+      e.provider?.id === 'browser_control' ||
       e.name === 'web_search' ||
-      e.name === 'web_fetch',
+      e.name === 'web_fetch' ||
+      e.name.startsWith('browser_'),
   );
   if (continuableExecutions.length === 0) return;
   if (!complete.chatSessionId || complete.assistantMessageId == null) return;
@@ -1766,8 +1768,10 @@ function startInlineAgentIfNeeded(
       (d) =>
         d.provider?.kind === 'mcp' ||
         d.provider?.id === 'web' ||
+        d.provider?.id === 'browser_control' ||
         d.name === 'web_search' ||
-        d.name === 'web_fetch',
+        d.name === 'web_fetch' ||
+        d.name.startsWith('browser_'),
     ),
     locale: currentContentLocale,
     powWasmUrl: chrome.runtime.getURL(DEEPSEEK_POW_WASM_PATH),

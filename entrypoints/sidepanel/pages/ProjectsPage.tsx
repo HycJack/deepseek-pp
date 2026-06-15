@@ -3,6 +3,7 @@ import type { ProjectContext, ProjectContextState, ProjectFile } from '../../../
 import PageIntro from '../components/PageIntro';
 import { requestGitHubProjectImportPermission } from '../github-permission';
 import { useI18n } from '../i18n';
+import { getRuntimeErrorMessage, unwrapRuntimeResponse } from '../runtime-response';
 
 type ImportState = 'idle' | 'running' | 'error' | 'done';
 
@@ -118,7 +119,7 @@ export default function ProjectsPage() {
       setManualContent('');
       await load();
     } catch (error) {
-      setMessage(t('sidepanel.projectsPage.operationFailed', { error: getErrorMessage(error) }));
+      setMessage(t('sidepanel.projectsPage.operationFailed', { error: getRuntimeErrorMessage(error) }));
     }
   }
 
@@ -174,12 +175,12 @@ export default function ProjectsPage() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       await load();
     } catch (error) {
-      setMessage(t('sidepanel.projectsPage.operationFailed', { error: getErrorMessage(error) }));
+      setMessage(t('sidepanel.projectsPage.operationFailed', { error: getRuntimeErrorMessage(error) }));
     }
   }
 
   function showProjectError(error: unknown) {
-    setStatusMessage(t('sidepanel.projectsPage.operationFailed', { error: getErrorMessage(error) }));
+    setStatusMessage(t('sidepanel.projectsPage.operationFailed', { error: getRuntimeErrorMessage(error) }));
   }
 
   return (
@@ -212,6 +213,7 @@ export default function ProjectsPage() {
           style={inputStyle}
         />
         <button
+          type="button"
           onClick={createProject}
           disabled={!name.trim()}
           className="ds-btn-primary px-3 py-2 text-xs rounded-lg disabled:opacity-40"
@@ -246,7 +248,7 @@ export default function ProjectsPage() {
                 })}
               </div>
             </div>
-            <button onClick={() => deleteProject(project)} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md">
+            <button type="button" onClick={() => deleteProject(project)} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md">
               {t('sidepanel.projectsPage.deleteProject')}
             </button>
           </div>
@@ -290,6 +292,7 @@ export default function ProjectsPage() {
               {t('sidepanel.projectsPage.githubTokenHelp')}
             </div>
             <button
+              type="button"
               onClick={importGithub}
               disabled={importState === 'running' || !githubUrl.trim()}
               className="ds-btn-secondary px-3 py-2 text-xs rounded-lg disabled:opacity-40"
@@ -328,6 +331,7 @@ export default function ProjectsPage() {
               placeholder={t('sidepanel.projectsPage.manualContentPlaceholder')}
             />
             <button
+              type="button"
               onClick={addManualFile}
               disabled={!manualPath.trim() || !manualContent.trim()}
               className="ds-btn-secondary px-3 py-2 text-xs rounded-lg disabled:opacity-40"
@@ -351,7 +355,7 @@ export default function ProjectsPage() {
                     })
                       .then((response) => unwrapProjectResponse(response, t('sidepanel.projectsPage.backendUnavailable')))
                       .then(load)
-                      .catch((error) => setMessage(t('sidepanel.projectsPage.operationFailed', { error: getErrorMessage(error) })));
+                      .catch((error) => setMessage(t('sidepanel.projectsPage.operationFailed', { error: getRuntimeErrorMessage(error) })));
                   }}
                 />
                 <span className="truncate">{file.path}</span>
@@ -372,21 +376,7 @@ const inputStyle = {
 };
 
 function unwrapProjectResponse<T = unknown>(response: unknown, missingMessage: string): T {
-  if (isBackgroundFailure(response)) {
-    throw new Error(response.error ? String(response.error) : missingMessage);
-  }
-  if (response === null || response === undefined) {
-    throw new Error(missingMessage);
-  }
-  return response as T;
-}
-
-function isBackgroundFailure(response: unknown): response is { ok: false; error?: unknown } {
-  return Boolean(
-    response &&
-    typeof response === 'object' &&
-    (response as { ok?: unknown }).ok === false,
-  );
+  return unwrapRuntimeResponse<T>(response, missingMessage);
 }
 
 function isProjectContextState(value: unknown): value is ProjectContextState {
@@ -404,8 +394,4 @@ function isProjectContext(value: unknown): value is ProjectContext {
   return typeof project.id === 'string' &&
     typeof project.name === 'string' &&
     typeof project.instructions === 'string';
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

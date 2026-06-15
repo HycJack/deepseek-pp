@@ -4,6 +4,7 @@ import { createSavedItemsJsonArtifact, createSavedItemsMarkdownArtifact, type Se
 import PageIntro from '../components/PageIntro';
 import { SVG_PATHS } from '../constants';
 import { useI18n } from '../i18n';
+import { getRuntimeErrorMessage, unwrapRuntimeResponse } from '../runtime-response';
 
 interface SavedPageProps {
   onInsertPrompt: (text: string) => void;
@@ -17,6 +18,7 @@ export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
 
   const load = async () => {
     const result = await chrome.runtime.sendMessage({ type: 'GET_SAVED_ITEMS' });
@@ -46,18 +48,28 @@ export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
   }, [items, query]);
 
   const save = async () => {
+    if (!title.trim() || !content.trim()) return;
     const payload: SavedItemInput = {
       kind,
       title,
       content,
       tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean),
     };
-    const saved = await chrome.runtime.sendMessage({ type: 'SAVE_SAVED_ITEM', payload });
-    if (saved?.id) {
+    try {
+      setStatusMessage('');
+      const saved = unwrapRuntimeResponse<SavedItem>(
+        await chrome.runtime.sendMessage({ type: 'SAVE_SAVED_ITEM', payload }),
+        t('sidepanel.savedPage.backendUnavailable'),
+      );
+      if (!saved.id) {
+        throw new Error(t('sidepanel.savedPage.backendUnavailable'));
+      }
       setTitle('');
       setContent('');
       setTags('');
       await load();
+    } catch (error) {
+      setStatusMessage(t('sidepanel.savedPage.operationFailed', { error: getRuntimeErrorMessage(error) }));
     }
   };
 
@@ -112,6 +124,7 @@ export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
         <div className="grid grid-cols-2 gap-2">
           {(['snippet', 'bookmark'] as const).map((value) => (
             <button
+              type="button"
               key={value}
               onClick={() => setKind(value)}
               className="py-2 text-[11px] font-medium rounded-lg border transition-all duration-150"
@@ -148,12 +161,18 @@ export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
           style={inputStyle}
         />
         <button
+          type="button"
           onClick={save}
           disabled={!title.trim() || !content.trim()}
           className="ds-btn-primary w-full py-2.5 text-xs font-medium text-white rounded-lg transition-all duration-150 disabled:opacity-40"
         >
           {t('sidepanel.savedPage.save')}
         </button>
+        {statusMessage && (
+          <div className="text-[11px] rounded-lg px-2 py-1.5" style={{ color: 'var(--ds-text-secondary)', background: 'var(--ds-surface)' }}>
+            {statusMessage}
+          </div>
+        )}
       </div>
 
       <input
@@ -188,6 +207,7 @@ export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => remove(item.id)}
                 className="shrink-0 p-1.5 rounded-md transition-colors"
                 style={{ color: 'var(--ds-danger)' }}
@@ -211,6 +231,7 @@ export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
               </div>
             )}
             <button
+              type="button"
               onClick={() => onInsertPrompt(item.content)}
               className="ds-btn-secondary w-full py-2 text-[11px] font-medium rounded-lg transition-all duration-150"
             >

@@ -36,6 +36,9 @@ describe('platform capability contracts', () => {
       sidePanel: {},
       contextMenus: {},
       alarms: {},
+      tabs: { query: vi.fn(), get: vi.fn() },
+      tabGroups: { query: vi.fn() },
+      debugger: { attach: vi.fn(), sendCommand: vi.fn() },
     });
 
     const environment = getCurrentBrowserExtensionEnvironment();
@@ -43,6 +46,8 @@ describe('platform capability contracts', () => {
     expect(environment.kind).toBe('browser_extension');
     expect(isCapabilitySupported(environment, 'nativeMessaging')).toBe(true);
     expect(isCapabilitySupported(environment, 'sidePanel')).toBe(true);
+    expect(isCapabilitySupported(environment, 'browserControl')).toBe(true);
+    expect(isCapabilitySupported(environment, 'accessibilityTree')).toBe(true);
   });
 
   it('detects Android WebView as explicit non-native-messaging platform', () => {
@@ -54,6 +59,7 @@ describe('platform capability contracts', () => {
     expect(environment.capabilities.storage).toBe(true);
     expect(environment.capabilities.nativeMessaging).toBe(false);
     expect(environment.capabilities.sidePanel).toBe(false);
+    expect(environment.capabilities.browserControl).toBe(false);
   });
 
   it('filters native MCP controls when native messaging is unsupported', () => {

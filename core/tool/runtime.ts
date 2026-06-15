@@ -39,6 +39,12 @@ import {
   executeMemoryImportToolCall,
   isMemoryImportToolName,
 } from '../memory/import-tool';
+import {
+  createBrowserControlToolDescriptors,
+  executeBrowserControlToolCall,
+  isBrowserControlToolName,
+  shouldExposeBrowserControlTools,
+} from '../browser-control/tool';
 import { getWebToolSettings } from './web-settings';
 import type { ToolCall, ToolDescriptor, ToolExecutionTrigger, ToolResult } from './types';
 
@@ -65,12 +71,16 @@ export async function getRuntimeToolDescriptors(
   const enabledWebDescriptors = createWebSearchToolDescriptors(locale).filter(
     (d) => webSettings[d.name as keyof typeof webSettings] !== false,
   );
+  const browserControlDescriptors = await shouldExposeBrowserControlTools()
+    ? createBrowserControlToolDescriptors(locale)
+    : [];
   return [
     ...createMemoryToolDescriptors(locale),
     ...enabledWebDescriptors,
     ...createArtifactToolDescriptors(locale),
     ...createSkillCreatorToolDescriptors(locale),
     ...createMemoryImportToolDescriptors(locale),
+    ...browserControlDescriptors,
     ...await getMcpToolDescriptors(),
   ];
 }
@@ -131,6 +141,10 @@ async function executeToolCallWithoutHistory(
 
   if (isMemoryImportToolName(call.name)) {
     return executeMemoryImportToolCall(call, locale);
+  }
+
+  if (isBrowserControlToolName(call.name)) {
+    return executeBrowserControlToolCall(call, locale);
   }
 
   if (call.provider?.kind === 'mcp' || call.descriptorId?.startsWith('mcp:')) {

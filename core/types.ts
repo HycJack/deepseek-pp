@@ -203,7 +203,7 @@ export interface SyncCounts {
   savedItems: number;
 }
 
-export type SkillSource = 'builtin' | 'official' | 'custom' | 'remote';
+export type SkillSource = 'builtin' | 'third-party' | 'official' | 'custom' | 'remote';
 
 export interface RemoteSkillFile {
   path: string;

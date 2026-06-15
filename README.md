@@ -194,11 +194,11 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 
 ### OfficeCLI 文档工具
 
-- **内置 `/officecli` skill** — 面向 `.docx`、`.xlsx`、`.pptx` 的检查、问题定位、验证和受控修改流程
-- **官方 Skill 库** — 内置 OfficeCLI 官方的 DOCX、XLSX、PPTX、Pitch Deck、Academic Paper、Financial Model、Dashboard、Morph PPT 等场景技能
-- **官方样式库** — 内置 OfficeCLI 官方 PPT styles 索引和样式说明，可用 `/officecli-pptx /officecli-styles ...` 链式加载完整视觉风格
+- **内置 `/officecli` skill** — 面向 `.docx`、`.xlsx`、`.pptx` 的检查、问题定位、验证和受控修改流程，默认停用，需在 Skill 页手动启用
+- **第三方 Skill 库** — 内置 OfficeCLI 的 DOCX、XLSX、PPTX、Pitch Deck、Academic Paper、Financial Model、Dashboard、Morph PPT 等场景技能
+- **第三方样式库** — 内置 OfficeCLI PPT styles 索引和样式说明，可用 `/officecli-pptx /officecli-styles ...` 链式加载完整视觉风格
 - **通过 Shell MCP 执行** — 侧边栏创建 `Shell` 预设后，模型通过 `shell_exec` 调用本机命令版 OfficeCLI
-- **自动安装命令版** — `deepseek-pp-shell-host` 会按系统和 CPU 架构从 iOfficeAI/OfficeCLI 官方发布资产安装单二进制
+- **自动安装命令版** — `deepseek-pp-shell-host` 会按系统和 CPU 架构从 iOfficeAI/OfficeCLI 发布资产安装单二进制
 - **命令版优先** — skill 会先检查 `officecli --help` 是否包含 `view/get/set/batch` 等脚本化命令
 - **拒绝额度生成路径** — 如果当前二进制只有 `new --prompt` 这类 hosted AI 生成能力，skill 会停止并提示切换 OfficeCLI 二进制
 - **真实本机路径** — 文档路径由用户提供或通过 Shell MCP 查询，不猜测占位目录
@@ -231,7 +231,7 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 
 ### Skill 技能系统
 
-- **内置技能** — 预设多组开箱即用的技能，包含通用协作技能和 OfficeCLI 官方文档技能
+- **内置技能** — 预设多组开箱即用的技能，包含通用协作技能和可手动启用的 OfficeCLI 第三方文档技能
 - **自定义技能** — 在侧边栏创建专属技能，定义系统指令和参数
 - **GitHub 导入** — 支持从 GitHub 仓库、目录或单个 `SKILL.md` 链接预览并导入第三方 Skill
 - **来源与更新** — GitHub 导入的 Skill 会显示来源仓库、版本、license、同步时间，并支持检查和同步上游更新
@@ -517,7 +517,7 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 
 | 方向 | 主要变化 |
 |------|----------|
-| OfficeCLI 文档工具 | 内置 OfficeCLI 官方 Skill 与样式库，新增 Shell MCP 预设和安装脚本，让 DeepSeek 可以通过本机命令版 OfficeCLI 检查、读取、修改和验证 Office 文件。 |
+| OfficeCLI 文档工具 | 内置 OfficeCLI 第三方 Skill 与样式库，新增 Shell MCP 预设和安装脚本，让 DeepSeek 可以通过本机命令版 OfficeCLI 检查、读取、修改和验证 Office 文件。 |
 | Agent 式持续执行 | MCP 工具结果可以回传到同一会话继续生成，让 DeepSeek 像 Claude Code / Codex 一样根据执行结果持续决定下一步；页面按 Step 折叠展示连续执行过程，并支持停止与刷新恢复。 |
 | 输出速度显示 | 回复生成时显示实时 `tok/s`，更容易判断当前会话的输出状态。 |
 | 自动化任务 | 自动化负责手动或定时触发任务，继续支持独立会话、立即运行、cron/RRULE 调度、暂停/编辑/删除，并可复用 Agent 式续跑链路。 |

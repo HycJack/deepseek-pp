@@ -24,6 +24,13 @@ interface SourceActionState {
   update?: GitHubSkillUpdatePreview;
 }
 
+interface ThirdPartySkillGroup {
+  id: string;
+  title: string;
+  subtitle: string;
+  skills: Skill[];
+}
+
 function SkillSection({ title, skills, onEdit, onDelete, onToggleEnabled }: SkillSectionProps) {
   if (skills.length === 0) return null;
   return (
@@ -52,6 +59,7 @@ export default function SkillPage() {
   const [showImport, setShowImport] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [sourceActions, setSourceActions] = useState<Record<string, SourceActionState>>({});
+  const [expandedThirdPartyGroups, setExpandedThirdPartyGroups] = useState<Record<string, boolean>>({});
 
   const load = async () => {
     const [list, sources]: [Skill[], GitHubSkillSource[]] = await Promise.all([
@@ -98,6 +106,22 @@ export default function SkillPage() {
       payload: { name: skill.name, enabled: skill.enabled === false },
     });
     await load();
+  };
+
+  const handleToggleGroupEnabled = async (group: ThirdPartySkillGroup) => {
+    const shouldEnable = group.skills.some((skill) => skill.enabled === false);
+    await Promise.all(group.skills.map((skill) => chrome.runtime.sendMessage({
+      type: 'SET_SKILL_ENABLED',
+      payload: { name: skill.name, enabled: shouldEnable },
+    })));
+    await load();
+  };
+
+  const handleToggleThirdPartyGroup = (groupId: string) => {
+    setExpandedThirdPartyGroups((current) => ({
+      ...current,
+      [groupId]: !current[groupId],
+    }));
   };
 
   const handleSave = async (skill: Skill) => {
@@ -195,8 +219,11 @@ export default function SkillPage() {
   };
 
   const builtin = skills.filter((s) => s.source === 'builtin');
-  const official = skills.filter((s) => s.source === 'official');
-  const remote = skills.filter((s) => s.source === 'remote');
+  const thirdPartyGroups = createThirdPartySkillGroups(
+    skills.filter((s) => isThirdPartySkillSource(s.source)),
+    skillSources,
+    t,
+  );
   const custom = skills.filter((s) => s.source === 'custom');
   const enabledCount = skills.filter((s) => s.enabled !== false).length;
 
@@ -252,14 +279,15 @@ export default function SkillPage() {
         />
       )}
 
-      <SkillSection
-        title={t('sidepanel.skillPage.sectionGithub')}
-        skills={remote}
+      <SkillSection title={t('sidepanel.skillPage.sectionBuiltin')} skills={builtin} />
+      <ThirdPartySkillSection
+        groups={thirdPartyGroups}
+        expandedGroups={expandedThirdPartyGroups}
+        onToggleGroup={handleToggleThirdPartyGroup}
+        onToggleGroupEnabled={handleToggleGroupEnabled}
         onDelete={handleDelete}
         onToggleEnabled={handleToggleEnabled}
       />
-      <SkillSection title={t('sidepanel.skillPage.sectionBuiltin')} skills={builtin} />
-      <SkillSection title={t('sidepanel.skillPage.sectionOfficial')} skills={official} />
       <SkillSection
         title={t('sidepanel.skillPage.sectionCustom')}
         skills={custom}
@@ -281,6 +309,99 @@ export default function SkillPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function ThirdPartySkillSection({ groups, expandedGroups, onToggleGroup, onToggleGroupEnabled, onDelete, onToggleEnabled }: {
+  groups: ThirdPartySkillGroup[];
+  expandedGroups: Record<string, boolean>;
+  onToggleGroup: (groupId: string) => void;
+  onToggleGroupEnabled: (group: ThirdPartySkillGroup) => void;
+  onDelete: (name: string) => void;
+  onToggleEnabled: (skill: Skill) => void;
+}) {
+  const { t } = useI18n();
+  if (groups.length === 0) return null;
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--ds-text-tertiary)' }}>
+        {t('sidepanel.skillPage.sectionThirdParty')}
+      </h3>
+      {groups.map((group) => {
+        const expanded = expandedGroups[group.id] === true;
+        const enabledCount = group.skills.filter((skill) => skill.enabled !== false).length;
+        const shouldDisableAll = enabledCount === group.skills.length;
+        const toggleAllLabel = shouldDisableAll
+          ? t('sidepanel.skillPage.disableSourceSkills')
+          : t('sidepanel.skillPage.enableSourceSkills');
+
+        return (
+          <div key={group.id} className="ds-surface-panel rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 p-3">
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-label={expanded
+                  ? t('sidepanel.skillPage.collapseSource', { source: group.title })
+                  : t('sidepanel.skillPage.expandSource', { source: group.title })}
+                onClick={() => onToggleGroup(group.id)}
+                className="min-w-0 flex-1 flex items-center gap-2 text-left rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ds-blue)]"
+              >
+                <svg
+                  className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.4}
+                  style={{ color: 'var(--ds-text-tertiary)' }}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--ds-text)' }}>
+                      {group.title}
+                    </span>
+                    <span className="ds-badge-warning inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+                      {t('sidepanel.skill.sources.thirdParty')}
+                    </span>
+                  </span>
+                  <span className="block text-[11px] mt-0.5 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
+                    {group.subtitle} · {t('sidepanel.skillPage.enabledSkillCount', {
+                      enabled: enabledCount,
+                      total: group.skills.length,
+                    })}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleGroupEnabled(group)}
+                className="ds-btn-secondary px-2 py-1 text-[11px] font-medium rounded-md shrink-0"
+              >
+                {toggleAllLabel}
+              </button>
+            </div>
+            {expanded && (
+              <div
+                className="space-y-2 p-3 pt-2 animate-slide-down"
+                style={{ borderTop: '1px solid var(--ds-border)' }}
+              >
+                {group.skills.map((skill) => (
+                  <SkillCard
+                    key={skill.name}
+                    skill={skill}
+                    onDelete={skill.source === 'remote' ? () => onDelete(skill.name) : undefined}
+                    onToggleEnabled={() => onToggleEnabled(skill)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -382,6 +503,62 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
       )}
     </div>
   );
+}
+
+function createThirdPartySkillGroups(
+  skills: Skill[],
+  sources: GitHubSkillSource[],
+  t: (key: LocaleMessageKey, params?: MessageParams) => string,
+): ThirdPartySkillGroup[] {
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const groups = new Map<string, ThirdPartySkillGroup>();
+
+  for (const skill of skills) {
+    const descriptor = getThirdPartyGroupDescriptor(skill, sourceById, t);
+    const group = groups.get(descriptor.id);
+    if (group) {
+      group.skills.push(skill);
+    } else {
+      groups.set(descriptor.id, {
+        ...descriptor,
+        skills: [skill],
+      });
+    }
+  }
+
+  return [...groups.values()];
+}
+
+function getThirdPartyGroupDescriptor(
+  skill: Skill,
+  sourceById: Map<string, GitHubSkillSource>,
+  t: (key: LocaleMessageKey, params?: MessageParams) => string,
+): Omit<ThirdPartySkillGroup, 'skills'> {
+  if (skill.source === 'remote') {
+    const source = skill.remote?.sourceId ? sourceById.get(skill.remote.sourceId) : undefined;
+    const title = source?.repository ?? skill.remote?.repository ?? 'GitHub';
+    const rootPath = source?.rootPath ?? '';
+    const ref = source?.ref ?? skill.remote?.ref;
+    return {
+      id: `github:${source?.id ?? skill.remote?.sourceId ?? title}`,
+      title,
+      subtitle: [
+        rootPath || t('sidepanel.skillPage.repoRoot'),
+        ref,
+      ].filter(Boolean).join(' · '),
+    };
+  }
+
+  const provider = skill.metadata?.provider ?? t('sidepanel.skillPage.unknownThirdPartySource');
+  return {
+    id: `bundled:${provider}`,
+    title: provider,
+    subtitle: t('sidepanel.skillPage.bundledThirdPartySource'),
+  };
+}
+
+function isThirdPartySkillSource(source: Skill['source']): boolean {
+  return source === 'third-party' || source === 'official' || source === 'remote';
 }
 
 function formatUpdateMessage(

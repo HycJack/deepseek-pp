@@ -22,7 +22,7 @@ import {
 } from '../project/types';
 
 const MEMORY_TYPES: readonly MemoryType[] = ['user', 'feedback', 'topic', 'reference'];
-const SKILL_SOURCES: readonly SkillSource[] = ['builtin', 'official', 'custom', 'remote'];
+const SKILL_SOURCES: readonly SkillSource[] = ['builtin', 'third-party', 'official', 'custom', 'remote'];
 const PROJECT_SOURCE_KINDS: readonly ProjectSourceKind[] = ['manual', 'local_folder', 'github', 'web_page'];
 const SAVED_ITEM_KINDS: readonly SavedItemKind[] = ['snippet', 'bookmark'];
 

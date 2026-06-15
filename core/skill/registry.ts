@@ -4,15 +4,24 @@ import { BUILTIN_SKILLS, getLocalizedBuiltinSkills } from './builtin';
 
 const STORAGE_KEY = 'deepseek_pp_skills';
 const SOURCES_STORAGE_KEY = 'deepseek_pp_skill_sources';
+const BUNDLED_ENABLED_STORAGE_KEY = 'deepseek_pp_bundled_skill_enabled';
 
 const USER_SKILL_SOURCES = new Set(['custom', 'remote']);
+const TOGGLEABLE_BUNDLED_SKILL_SOURCES = new Set(['third-party', 'official']);
 
 export async function getAllSkills(
   options: { includeDisabled?: boolean; locale?: SupportedLocale } = {},
 ): Promise<Skill[]> {
+  const [userSkills, bundledEnabled] = await Promise.all([
+    getUserSkills(),
+    getBundledSkillEnabledOverrides(),
+  ]);
   const skills = [
-    ...getLocalizedBuiltinSkills(options.locale ?? DEFAULT_LOCALE),
-    ...await getUserSkills(),
+    ...applyBundledSkillEnabledOverrides(
+      getLocalizedBuiltinSkills(options.locale ?? DEFAULT_LOCALE),
+      bundledEnabled,
+    ),
+    ...userSkills,
   ];
   if (options.includeDisabled) return skills;
   return skills.filter((skill) => skill.enabled !== false);
@@ -78,8 +87,24 @@ export async function setSkillEnabled(name: string, enabled: boolean): Promise<v
     found = true;
     return { ...skill, enabled };
   });
-  if (!found) throw new Error(`Skill cannot be enabled or disabled because it was not found: ${name}`);
-  await chrome.storage.local.set({ [STORAGE_KEY]: next });
+  if (found) {
+    await chrome.storage.local.set({ [STORAGE_KEY]: next });
+    return;
+  }
+
+  const bundledSkill = BUILTIN_SKILLS.find((skill) => (
+    skill.name === name &&
+    TOGGLEABLE_BUNDLED_SKILL_SOURCES.has(skill.source)
+  ));
+  if (!bundledSkill) throw new Error(`Skill cannot be enabled or disabled because it was not found: ${name}`);
+
+  const bundledEnabled = await getBundledSkillEnabledOverrides();
+  await chrome.storage.local.set({
+    [BUNDLED_ENABLED_STORAGE_KEY]: {
+      ...bundledEnabled,
+      [name]: enabled,
+    },
+  });
 }
 
 export async function getAllSkillSources(): Promise<GitHubSkillSource[]> {
@@ -192,6 +217,26 @@ function normalizeStoredSkills(value: unknown): Skill[] {
       USER_SKILL_SOURCES.has((skill as Skill).source)
     ))
     .map((skill) => ({ ...skill, enabled: skill.enabled !== false }));
+}
+
+async function getBundledSkillEnabledOverrides(): Promise<Record<string, boolean>> {
+  const data = await chrome.storage.local.get(BUNDLED_ENABLED_STORAGE_KEY) as Record<string, unknown>;
+  const value = data[BUNDLED_ENABLED_STORAGE_KEY];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([name, enabled]) => typeof name === 'string' && typeof enabled === 'boolean'),
+  ) as Record<string, boolean>;
+}
+
+function applyBundledSkillEnabledOverrides(skills: Skill[], bundledEnabled: Record<string, boolean>): Skill[] {
+  return skills.map((skill) => {
+    if (!TOGGLEABLE_BUNDLED_SKILL_SOURCES.has(skill.source) || bundledEnabled[skill.name] === undefined) {
+      return { ...skill };
+    }
+    return { ...skill, enabled: bundledEnabled[skill.name] };
+  });
 }
 
 function createUniqueSkillName(preferred: string, occupiedNames: Set<string>): string {

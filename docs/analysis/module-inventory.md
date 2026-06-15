@@ -1,231 +1,226 @@
 # Module Inventory
 
-## Summary Table
+## Summary
 
-| Module | Responsibility | Dependencies | Files | Lines | Complexity | S.U.P.E.R Score |
-|:--|:--|:--|--:|--:|:--|:--|
-| Browser entrypoints | Extension lifecycle, content/main/background scripts | WXT, DOM, chrome APIs, core modules | 3 | ~2,000+ | Critical | S🟡 U🟡 P🟡 E🔴 R🟡 |
-| Sidepanel UI | Management UI for settings, tools, memory, skills, MCP, automation, chat | React, core stores, i18n | 25 | 6,562 | High | S🟡 U🟡 P🟡 E🟡 R🟡 |
-| Interceptor | Fetch/SSE parsing, request augmentation, tool-call extraction | DeepSeek request shape, prompt/tool contracts | 6 | 1,879 | Critical | S🟡 U🟡 P🟡 E🔴 R🟡 |
-| Prompt + memory | Prompt assembly, memory selection/injection, prompt visibility | i18n, token estimator, memory store | 5 | 456 | Medium | S🟢 U🟢 P🟡 E🟢 R🟡 |
-| Tool runtime | Local tool schema, invocation parsing, execution history | memory, web, MCP descriptors | 9 | 1,682 | High | S🟢 U🟢 P🟡 E🟡 R🟢 |
-| MCP + shell | External tool discovery/execution and native shell bridge | browser messaging, native host, MCP transports | 12 | 1,685 | High | S🟡 U🟢 P🟢 E🟡 R🟢 |
-| Skill system | Builtin/custom/remote Skill registry, parser, GitHub import | chrome storage, GitHub API, i18n | 5 | 1,869 | High | S🟡 U🟡 P🟡 E🟡 R🟡 |
-| Export | Conversation export normalization, artifacts, attachment metadata | DeepSeek official API, content UI | 11 | 1,697 | Medium | S🟢 U🟢 P🟢 E🟡 R🟢 |
-| Automation | Scheduled DeepSeek task execution | alarms, DeepSeek API, prompt/tool stack | 7 | 1,891 | High | S🟡 U🟢 P🟡 E🟡 R🟡 |
-| i18n | Locale resources, preference storage, translation helpers | chrome storage, manifest locales | 5 | 400+ | Medium | S🟢 U🟢 P🟡 E🟢 R🟢 |
-| Sync | WebDAV config/schema/client | browser storage, WebDAV | 3 | 387 | Medium | S🟢 U🟢 P🟢 E🟡 R🟢 |
-| Pet/theme/token UI | Visual feedback and token speed | content DOM, storage, i18n | 8 | 400+ | Medium | S🟢 U🟡 P🟡 E🟡 R🟡 |
-| Tests/scripts | Build, release, i18n, smoke, policy verification | npm, WXT, Vitest, gh/actionlint optional | 30+ | n/a | Medium | S🟢 U🟢 P🟡 E🟡 R🟢 |
+This inventory focuses on the browser-control alignment slice: Chromium CDP / `chrome.debugger`, Accessibility Tree UID snapshots, controlled tabs and tab groups, browser action tools, shared tool-loop integration, sidepanel UI, permissions, and validation.
 
-> S.U.P.E.R score uses green = healthy, yellow = partial, red = violation.
+| Module | Responsibility | Files / Lines | Complexity | S.U.P.E.R Score | Browser-Control Role |
+|:--|:--|--:|:--|:--|:--|
+| `core/tool` | Tool descriptors, invocation catalog, local runtime dispatch, tool history | 12 / ~1,840 | High | S🟡 U🟡 P🟡 E🟡 R🟡 | Add browser-control local provider |
+| `core/tool-loop` | Sequential execution and continuation-loop helpers | 1 / ~89 | Low | S🟢 U🟢 P🟡 E🟢 R🟢 | Reuse action execution ordering |
+| `core/interceptor` | DeepSeek request/response hook, SSE parsing, tool call detection | 9 / ~2,768 | Critical | S🔴 U🟡 P🟡 E🔴 R🔴 | Inject descriptors only; no CDP logic |
+| `core/inline-agent` | Multi-step inline agent loop, prompts, trace renderer | 5 / ~1,213 | High | S🟡 U🟡 P🟡 E🟡 R🟡 | Must support browser tool continuation |
+| `core/mcp` | MCP configuration, discovery, policy, transports | 11 / ~2,114 | High | S🟡 U🟢 P🟢 E🟡 R🟢 | Pattern reference for limits/policy; not the implementation path |
+| `core/platform` | Platform capability and service abstractions | 4 / ~247 | Medium | S🟢 U🟢 P🟡 E🟡 R🟡 | Add debugger/tabs/tabGroups/browserControl capabilities |
+| `core/messaging` / `core/types.ts` | Runtime message and bridge types | 2 / ~88 plus central types | Medium | S🟡 U🟡 P🟡 E🟡 R🟡 | Add browser-control RPC types |
+| `entrypoints/background.ts` | MV3 background runtime, RPC, tool execution, sidepanel chat, automation | 1 / ~1,915 | Critical | S🔴 U🟡 P🟡 E🔴 R🔴 | Own CDP/debugger and controlled tab registry |
+| `entrypoints/content.ts` | DeepSeek page bridge, tool UI, inline agent UI, DOM integrations | 1 / ~5,202 | Critical | S🔴 U🟡 P🟡 E🔴 R🔴 | UI/renderer only; no global browser-control state |
+| `entrypoints/sidepanel` | React management UI | 33 / ~8,805 | Critical | S🟡 U🟡 P🟡 E🔴 R🟡 | Add Browser Control page/status controls |
+| `wxt.config.ts` | Manifest construction and build plugins | 1 / ~165 | Medium | S🟡 U🟢 P🟡 E🟡 R🟡 | Add Chromium permissions and gate unsupported builds |
+| `tests/` | Vitest tests and fixtures | 35+ suites / ~4,271 | Medium | S🟢 U🟢 P🟡 E🟡 R🟡 | Add browser-control contract/mock/smoke tests |
 
 ## Module Details
 
-### Browser Entrypoints
-
-- **Path**: `entrypoints/content.ts`, `entrypoints/main-world.content.ts`, `entrypoints/background.ts`
-- **Responsibility**: Coordinate extension runtime across DeepSeek page, MAIN world fetch hook, content DOM, and background APIs.
-- **Public API**: WXT `defineContentScript`, runtime message handlers, MAIN/content bridge protocol.
-- **Internal Dependencies**: most `core/*` modules.
-- **External Dependencies**: WXT, browser/chrome APIs, DeepSeek DOM and request shape.
-- **Complexity Rating**: Critical.
-- **Transformation Notes**: Android cannot use MV3 APIs directly; this module needs a platform port layer rather than Android conditionals scattered through content/background logic.
-- **S.U.P.E.R Assessment**:
-  - **S**: Partial. `entrypoints/content.ts` owns export, pet, token speed, tool rendering, inline agent restore, theme sync, and bridge state.
-  - **U**: Partial. Content depends on core, but DOM/runtime concerns are mixed in one large entrypoint.
-  - **P**: Partial. MAIN/content bridge has message shapes, but they are not formal schemas.
-  - **E**: Violation. Assumes WebExtension APIs and desktop browser extension environment.
-  - **R**: Partial. Browser targets are replaceable through WXT; Android is not.
-
-### Sidepanel UI
-
-- **Path**: `entrypoints/sidepanel/`
-- **Responsibility**: User-facing configuration and management surfaces.
-- **Public API**: React pages/components and runtime messages.
-- **Internal Dependencies**: core stores, i18n resources, skill import, MCP store.
-- **External Dependencies**: React, Tailwind, browser APIs.
-- **Complexity Rating**: High.
-- **Transformation Notes**: New features should avoid making `SettingsPage.tsx` and `McpPage.tsx` larger. Add focused pages/components for Projects, Saved Items, Voice, and Android status.
-- **S.U.P.E.R Assessment**:
-  - **S**: Partial. Several pages are already large; new drawers should be separated by capability.
-  - **U**: Partial. UI generally calls stores, but some pages combine persistence, validation, and layout.
-  - **P**: Partial. Store contracts exist, but feature-specific schemas should be explicit.
-  - **E**: Partial. Browser extension APIs are assumed in UI flows.
-  - **R**: Partial. UI components are replaceable if backed by core contracts; large pages have higher replacement cost.
-
-### Interceptor
-
-- **Path**: `core/interceptor/`
-- **Responsibility**: Patch fetch, parse streaming responses, augment outgoing prompts, parse tool calls, restore tool blocks.
-- **Public API**: `installFetchHook`, `augmentRequestBody`, `extractToolCalls`, token speed and response completion payloads.
-- **Internal Dependencies**: prompt, skill, tool descriptors, DeepSeek PoW.
-- **External Dependencies**: DeepSeek request/response shape, browser fetch/SSE behavior.
-- **Complexity Rating**: Critical.
-- **Transformation Notes**: New Better-style tags should be normalized into existing tool-call contracts instead of adding a second parser family in parallel.
-- **S.U.P.E.R Assessment**:
-  - **S**: Partial. Fetch hook is very large and mixes request/response/token/tool restore details.
-  - **U**: Partial. Request flow is mostly one-directional, but hook state is mutable and broad.
-  - **P**: Partial. Tool descriptors are typed; bridge messages and DeepSeek body shapes need stronger schemas.
-  - **E**: Violation. Hard browser/DeepSeek assumptions; Android needs an injected-script adapter.
-  - **R**: Partial. Replacement cost is high because many features converge here.
-
-### Prompt + Memory
-
-- **Path**: `core/prompt/`, `core/memory/`
-- **Responsibility**: Build augmented prompts and select relevant memories.
-- **Public API**: `buildPromptAugmentation`, `selectMemories`, memory store helpers.
-- **Internal Dependencies**: i18n, token estimator, constants.
-- **External Dependencies**: browser storage for persistence.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Better DeepSeek's token-overlap memory and imported-memory workflow are natural upgrades if added behind the selector/store contract.
-- **S.U.P.E.R Assessment**:
-  - **S**: Healthy. Prompt and memory selector responsibilities are fairly focused.
-  - **U**: Healthy. Prompt assembly consumes stores/descriptors rather than writing them.
-  - **P**: Partial. Memory objects are typed, but import/export schemas can be stricter.
-  - **E**: Healthy for pure selection; storage access remains browser-bound in store.
-  - **R**: Partial. Selector can be swapped; persisted memory schema changes need migration.
-
-### Tool Runtime
+### `core/tool`
 
 - **Path**: `core/tool/`
-- **Responsibility**: Local tool descriptors, invocation parsing, execution history, web/memory tools.
-- **Public API**: `ToolDescriptor`, `ToolProvider`, `createToolInvocationCatalog`, `executeWebSearchToolCall`.
-- **Internal Dependencies**: i18n, memory, web settings.
-- **External Dependencies**: fetch and host permissions for web tools.
+- **Responsibility**: Defines tool contracts, descriptor catalogs, tool invocation parsing metadata, runtime execution dispatch, and tool execution history.
+- **Public API**: `ToolDescriptor`, `ToolProvider`, `createToolInvocationCatalog`, `getRuntimeToolDescriptors`, `executeRuntimeToolCall`, `appendToolCallHistory`.
+- **Internal Dependencies**: memory, web search, artifact, skill creator, memory import, MCP discovery, i18n, web-tool settings.
+- **External Dependencies**: `chrome.storage.local`, `fetch`, host permissions.
 - **Complexity Rating**: High.
-- **Transformation Notes**: Generated files, project context, code runner, voice, and GitHub fetch should be represented as ToolDescriptor-compatible local providers where the model-facing behavior needs tool calls.
+- **Transformation Notes**: Browser-control tools should be a local provider with descriptors and execution dispatch. The current runtime dispatch is name-branch based; a provider registry is the cleaner long-term shape, but the first structural step can keep dispatch localized in `core/browser-control`.
 - **S.U.P.E.R Assessment**:
-  - **S**: Healthy. Core contracts are focused.
-  - **U**: Healthy. Providers conform to descriptors.
-  - **P**: Partial. JSON schemas exist but are not runtime-validated everywhere.
-  - **E**: Partial. Web tools rely on browser permissions and HTML parsing.
-  - **R**: Healthy. Provider model supports replacement.
+  - **S**: Partial. Tool concepts are cohesive, but runtime dispatch knows every provider.
+  - **U**: Partial. Descriptors flow inward, execution calls outward to concrete providers.
+  - **P**: Partial. `ToolDescriptor` is a good port; some payload validation remains provider-specific.
+  - **E**: Partial. Some tools assume extension APIs.
+  - **R**: Partial. Adding providers is possible but still requires runtime edits.
 
-### MCP + Shell
+### `core/tool-loop`
 
-- **Path**: `core/mcp/`, `core/shell/`, `packages/shell-host/`
-- **Responsibility**: Discover and execute MCP tools across browser, remote, native messaging, and shell host.
-- **Public API**: MCP client/store/transports, shell contracts and policy.
-- **Internal Dependencies**: tool contracts, browser APIs, native messaging.
-- **External Dependencies**: MCP servers, native messaging manifests, local shell.
+- **Path**: `core/tool-loop/engine.ts`
+- **Responsibility**: Executes tool calls sequentially and supports generic continuation loops.
+- **Public API**: `executeToolCallsSequentially`, `runToolContinuationLoop`, `createToolExecutionRecord`.
+- **Internal Dependencies**: shared tool types.
+- **External Dependencies**: none.
+- **Complexity Rating**: Low.
+- **Transformation Notes**: Good reuse point. Browser action tools need observation/result size budgets upstream, not a second loop.
+- **S.U.P.E.R Assessment**:
+  - **S**: Compliant.
+  - **U**: Compliant.
+  - **P**: Partial; contracts are typed but not schema-validated.
+  - **E**: Compliant.
+  - **R**: Compliant.
+
+### `core/interceptor`
+
+- **Path**: `core/interceptor/`
+- **Responsibility**: Hooks DeepSeek requests/responses, augments prompts, parses streaming responses, detects and hides tool calls.
+- **Public API**: `installFetchHook`, `updateHookState`, `augmentRequestBody`, `extractToolCalls`, `createStreamingToolCallParser`.
+- **Internal Dependencies**: prompt augmentation, tool descriptors, token speed, history cleanup.
+- **External Dependencies**: DeepSeek web request shapes, SSE/XHR/IDB, browser fetch.
+- **Complexity Rating**: Critical.
+- **Transformation Notes**: Browser-control implementation must not live here. The interceptor should only receive browser-control descriptors and parse model tool calls.
+- **S.U.P.E.R Assessment**:
+  - **S**: Violation; hook state, stream parsing, history cleanup, and tool notification are tightly packed.
+  - **U**: Partial; data generally flows from network to content/background.
+  - **P**: Partial; parser contracts exist but DeepSeek response shapes leak through.
+  - **E**: Violation; tightly coupled to DeepSeek web internals.
+  - **R**: Violation; replacement cost is high.
+
+### `core/inline-agent`
+
+- **Path**: `core/inline-agent/`
+- **Responsibility**: Runs multi-step agent continuations after manual chat, including nudge and finalization prompts.
+- **Public API**: `runInlineAgentLoop`, prompt builders, renderer helpers, `InlineAgentStartPayload`.
+- **Internal Dependencies**: DeepSeek adapter, tool-loop engine, interceptor parsers, i18n.
+- **External Dependencies**: DeepSeek web API headers/PoW and content DOM renderer.
 - **Complexity Rating**: High.
-- **Transformation Notes**: Browser-side code runner should not bypass shell policy accidentally. Android cannot use native messaging, so shell-dependent tools must degrade explicitly.
+- **Transformation Notes**: Browser-control tools must be allowed in this loop, and their observations should be structured and budgeted so snapshots do not pollute visible text/history.
 - **S.U.P.E.R Assessment**:
-  - **S**: Partial. MCP store and UI touch broad concerns.
-  - **U**: Healthy. Transports are relatively clean adapters.
-  - **P**: Healthy. MCP and shell contracts are explicit.
-  - **E**: Partial. Native messaging is desktop-only.
-  - **R**: Healthy. Transports are replaceable.
+  - **S**: Partial; loop and stream parsing are cohesive but carry DeepSeek specifics.
+  - **U**: Partial; execution is injected, but prompt building and model submission are coupled.
+  - **P**: Partial; payload is typed but not schema-validated.
+  - **E**: Partial; depends on DeepSeek web adapter.
+  - **R**: Partial; swappable with effort.
 
-### Skill System
+### `core/mcp`
 
-- **Path**: `core/skill/`, `entrypoints/sidepanel/components/GitHubSkillImportPanel.tsx`
-- **Responsibility**: Builtin, custom, and GitHub-imported skills.
-- **Public API**: `getAllSkills`, `saveSkill`, GitHub importer, parser.
-- **Internal Dependencies**: types, i18n, chrome storage.
-- **External Dependencies**: GitHub API.
+- **Path**: `core/mcp/`
+- **Responsibility**: Stores MCP servers, discovers tools, applies policy, and executes MCP JSON-RPC over multiple transports.
+- **Public API**: `getMcpToolDescriptors`, `refreshMcpServerDiscovery`, `executeMcpToolCall`, `createMcpTransport`.
+- **Internal Dependencies**: tool types, shell preset, platform gating.
+- **External Dependencies**: `chrome.storage`, `chrome.permissions`, `chrome.runtime.connectNative`, fetch transports.
 - **Complexity Rating**: High.
-- **Transformation Notes**: Better DeepSeek's AI-created Skill card maps well to current custom Skill creation, but should be implemented as a structured import/create flow rather than a raw BDS tag clone.
+- **Transformation Notes**: Useful design reference for cache TTLs, policy, limits, and errors. Browser control is built-in extension capability and must not be represented as external MCP.
 - **S.U.P.E.R Assessment**:
-  - **S**: Partial. Registry handles custom and remote source bookkeeping.
-  - **U**: Partial. UI/import/runtime have separate entry points but share storage contracts.
-  - **P**: Partial. Skill source contracts exist; import payloads should remain schema-guarded.
-  - **E**: Partial. GitHub import requires network and browser storage.
-  - **R**: Partial. Builtin/custom/remote are replaceable, but name/source migration is sensitive.
+  - **S**: Partial; several responsibilities but grouped around MCP.
+  - **U**: Compliant.
+  - **P**: Compliant; explicit MCP server/tool contracts.
+  - **E**: Partial; native transport is platform-bound.
+  - **R**: Compliant; transports are replaceable.
 
-### Export
+### `core/platform`
 
-- **Path**: `core/export/`
-- **Responsibility**: Export official DeepSeek conversations to structured data and artifacts.
-- **Public API**: `runConversationExport`, `buildConversationExportArtifacts`, export schemas.
-- **Internal Dependencies**: DeepSeek official API normalization, artifact builders.
-- **External Dependencies**: DeepSeek web session and file metadata endpoints.
+- **Path**: `core/platform/`
+- **Responsibility**: Detects platform capabilities and exposes platform services.
+- **Public API**: `PlatformEnvironment`, `PlatformServices`, `getCurrentPlatformEnvironment`, `createBrowserExtensionPlatformServices`.
+- **Internal Dependencies**: MCP gating.
+- **External Dependencies**: Chrome APIs and Android bridge detection.
 - **Complexity Rating**: Medium.
-- **Transformation Notes**: Better DeepSeek supports image export and specific-message export; current DeepSeek++ has stronger official-session export but lacks image output and saved-item/message-level workflows.
+- **Transformation Notes**: Add explicit capabilities for `tabs`, `tabGroups`, `debugger`, `scripting`, and `browserControl`; unsupported Firefox/Android states must be visible here.
 - **S.U.P.E.R Assessment**:
-  - **S**: Healthy. Normalization/artifact responsibilities are separated.
-  - **U**: Healthy. Transport is injected.
-  - **P**: Healthy. Export schema is explicit.
-  - **E**: Partial. Official endpoint assumptions are web-specific.
-  - **R**: Healthy. Transport and artifact builders are replaceable.
+  - **S**: Compliant.
+  - **U**: Compliant.
+  - **P**: Partial; capability map is typed but coarse.
+  - **E**: Partial; Chrome APIs are directly probed.
+  - **R**: Partial; good start, needs richer ports.
 
-### Automation
+### `core/messaging` and `core/types.ts`
 
-- **Path**: `core/automation/`
-- **Responsibility**: Create, schedule, run, and track repeat DeepSeek tasks.
-- **Public API**: automation store, scheduler, runner, message contracts.
-- **Internal Dependencies**: DeepSeek API, prompt/tool runtime.
-- **External Dependencies**: browser alarms and DeepSeek sessions.
-- **Complexity Rating**: High.
-- **Transformation Notes**: Better DeepSeek's server status/announcement/what's-new features are adjacent operational surfaces, not core automation dependencies.
-- **S.U.P.E.R Assessment**:
-  - **S**: Partial. Scheduling, running, and state are split but tightly coupled.
-  - **U**: Healthy. Runner consumes store/config and emits status.
-  - **P**: Partial. Automation types exist; persisted migrations should stay explicit.
-  - **E**: Partial. Alarms are extension-specific.
-  - **R**: Partial. Replacing scheduler or platform requires adapter work.
-
-### i18n
-
-- **Path**: `core/i18n/`, `public/_locales/`
-- **Responsibility**: Runtime and manifest localization.
-- **Public API**: `translate`, locale store/provider.
-- **Internal Dependencies**: resources.
-- **External Dependencies**: browser language and storage.
+- **Path**: `core/messaging.ts`, `core/messaging/schema.ts`, `core/types.ts`
+- **Responsibility**: Runtime messaging helpers and central message/action types.
+- **Public API**: `sendToBackground`, `sendToContentScript`, `onMessage`, `validateBridgeMessage`, `MessageAction`.
+- **Internal Dependencies**: shared project types.
+- **External Dependencies**: `chrome.runtime`, `chrome.tabs`.
 - **Complexity Rating**: Medium.
-- **Transformation Notes**: Better DeepSeek has more languages; DeepSeek++ currently has stronger bilingual model-facing coverage but fewer locales.
+- **Transformation Notes**: Browser-control RPC payloads require typed contracts for target tab, action name, UID, snapshot handle, debugger state, and error details. Runtime validation should be stronger than the current shallow bridge schema.
 - **S.U.P.E.R Assessment**:
-  - **S**: Healthy.
-  - **U**: Healthy.
-  - **P**: Partial. Key parity is tested; resource schema remains TypeScript-based.
-  - **E**: Healthy.
-  - **R**: Healthy.
+  - **S**: Partial; central `MessageAction` is broad.
+  - **U**: Partial.
+  - **P**: Partial; compile-time types exist, runtime validation is sparse.
+  - **E**: Partial.
+  - **R**: Partial.
 
-### Sync
+### `entrypoints/background.ts`
 
-- **Path**: `core/sync/`
-- **Responsibility**: WebDAV configuration, schema boundaries, client operations.
-- **Public API**: sync schema and WebDAV client.
-- **Internal Dependencies**: browser storage consumers.
-- **External Dependencies**: WebDAV server.
+- **Path**: `entrypoints/background.ts`
+- **Responsibility**: MV3 background runtime, message router, stores, MCP, local tool execution, sidepanel chat, automation, permissions, broadcasts.
+- **Public API**: `defineBackground`, runtime `handleMessage`, `EXECUTE_TOOL_CALL`, `GET_TOOL_DESCRIPTORS`, `REQUEST_HOST_PERMISSION`, broadcast helpers.
+- **Internal Dependencies**: nearly all core services.
+- **External Dependencies**: `chrome.runtime`, `chrome.tabs`, `chrome.permissions`, `chrome.sidePanel`, `chrome.contextMenus`, `chrome.alarms`, `chrome.offscreen`.
+- **Complexity Rating**: Critical.
+- **Transformation Notes**: It should own the browser-control service instance, but not the implementation details. Add narrow message cases and delegate to `core/browser-control`.
+- **S.U.P.E.R Assessment**:
+  - **S**: Violation; too many responsibilities.
+  - **U**: Partial.
+  - **P**: Partial.
+  - **E**: Violation; Chrome API assumptions are broad.
+  - **R**: Violation; replacement is expensive.
+
+### `entrypoints/content.ts`
+
+- **Path**: `entrypoints/content.ts`
+- **Responsibility**: DeepSeek page content script, main-world bridge, tool card rendering, inline agent trace, DOM integrations, exports, theme, pet UI.
+- **Public API**: WXT content script entry, bridge handlers, `runToolExecution`, inline agent render handlers.
+- **Internal Dependencies**: inline agent, artifact, tool renderer, interceptor types, i18n.
+- **External Dependencies**: DeepSeek DOM, `MutationObserver`, `chrome.runtime`, `chrome.storage`.
+- **Complexity Rating**: Critical.
+- **Transformation Notes**: Browser-control UI feedback may appear here through tool cards, but no CDP session state should be held in content.
+- **S.U.P.E.R Assessment**:
+  - **S**: Violation.
+  - **U**: Partial.
+  - **P**: Partial.
+  - **E**: Violation.
+  - **R**: Violation.
+
+### `entrypoints/sidepanel`
+
+- **Path**: `entrypoints/sidepanel/`
+- **Responsibility**: React management UI for chat, capabilities, tools, MCP, automation, settings, projects, memory, saved items.
+- **Public API**: `App`, `CapabilitiesPage`, `ToolsPage`, `McpPage`, `ChatPage`, i18n provider.
+- **Internal Dependencies**: core types, i18n, platform, shell, chat, voice, settings stores.
+- **External Dependencies**: React, `chrome.runtime`, `chrome.permissions`, `chrome.tabs`.
+- **Complexity Rating**: Critical.
+- **Transformation Notes**: Add a dedicated Browser Control page under Capabilities. Do not hide this inside existing Tools/MCP pages.
+- **S.U.P.E.R Assessment**:
+  - **S**: Partial.
+  - **U**: Partial.
+  - **P**: Partial.
+  - **E**: Violation; browser APIs are common in UI.
+  - **R**: Partial.
+
+### `wxt.config.ts`
+
+- **Path**: `wxt.config.ts`
+- **Responsibility**: WXT manifest and Vite build configuration.
+- **Public API**: `defineConfig`, `createManifest`.
+- **Internal Dependencies**: package version and safe WXT browser alias.
+- **External Dependencies**: WXT, Vite, Tailwind, Node fs/path/url.
 - **Complexity Rating**: Medium.
-- **Transformation Notes**: New persisted data types must explicitly decide whether they sync and whether secrets are excluded.
+- **Transformation Notes**: This is the manifest truth source. Browser-control parity requires a deliberate Chromium-only permission set and policy checks.
 - **S.U.P.E.R Assessment**:
-  - **S**: Healthy.
-  - **U**: Healthy.
-  - **P**: Healthy.
-  - **E**: Partial. External server config is runtime-dependent.
-  - **R**: Healthy.
+  - **S**: Partial.
+  - **U**: Compliant.
+  - **P**: Partial.
+  - **E**: Partial.
+  - **R**: Partial.
 
-### Pet, Theme, Token UI
+### `tests/`
 
-- **Path**: `core/pet/`, `core/theme/`, `core/token/`, content DOM sections.
-- **Responsibility**: Runtime visual feedback and token-speed indicator.
-- **Public API**: config stores, estimator, localized lines.
-- **Internal Dependencies**: content DOM, i18n, storage.
-- **External Dependencies**: DeepSeek DOM and page theme.
+- **Path**: `tests/`
+- **Responsibility**: Vitest unit/component/contract tests and fixtures.
+- **Public API**: `npm test`, per-suite tests.
+- **Internal Dependencies**: core modules, sidepanel React components, content adapters.
+- **External Dependencies**: Vitest, jsdom, React test rendering, stubbed Chrome APIs.
 - **Complexity Rating**: Medium.
-- **Transformation Notes**: Android theme/status-bar handling can reuse a theme reporting contract, but native bridge should own platform side effects.
+- **Transformation Notes**: Add focused tests before browser-control implementation hardens.
 - **S.U.P.E.R Assessment**:
-  - **S**: Healthy in core files.
-  - **U**: Partial because content entrypoint owns many DOM effects.
-  - **P**: Partial. Config types exist; DOM contract is implicit.
-  - **E**: Partial. Desktop DOM placement assumptions.
-  - **R**: Partial. Visual implementation is replaceable if state contracts remain stable.
+  - **S**: Compliant.
+  - **U**: Compliant.
+  - **P**: Partial.
+  - **E**: Partial.
+  - **R**: Partial.
 
-### Tests and Scripts
+## Current Gaps
 
-- **Path**: `tests/`, `scripts/`, `.github/workflows/`
-- **Responsibility**: Validation, release gates, smoke checks.
-- **Public API**: npm scripts.
-- **Internal Dependencies**: project modules.
-- **External Dependencies**: actionlint, WXT, Vitest, native host, npm registry for release closure.
-- **Complexity Rating**: Medium.
-- **Transformation Notes**: Android and e2e browser support require new test layers; do not call a server/build successful without a real smoke action.
-- **S.U.P.E.R Assessment**:
-  - **S**: Healthy.
-  - **U**: Healthy.
-  - **P**: Partial. Some smoke outputs are convention-based.
-  - **E**: Partial. Several checks depend on local tools.
-  - **R**: Healthy.
+| Gap | Evidence | Required Design Work |
+|:--|:--|:--|
+| CDP/debugger | no `chrome.debugger` or CDP service; manifest lacks `debugger` | background-owned debugger session service |
+| Accessibility Tree UID snapshot | no AX snapshot schema/cache/formatter | UID mapping, snapshot budget, stale UID errors |
+| Controlled tabs/groups | only ad hoc tab queries/creates | controlled tab registry, group title/color/lifecycle |
+| Browser action tools | no descriptors or runtime branch | browser-control local provider |
+| Tool-loop coverage | multiple loops exist | one provider across manual, sidepanel, inline agent, automation |
+| UI/permissions | no debugger/tabs UI | Browser Control sidepanel page and policy docs |
+| Validation | no CDP tests | mock Chrome API tests plus real smoke fixture |

@@ -10,12 +10,12 @@ const targets = [
   {
     browser: 'chrome',
     manifestPath: 'dist/chrome-mv3/manifest.json',
-    permissions: ['storage', 'alarms', 'nativeMessaging', 'contextMenus', 'offscreen', 'sidePanel'],
+    permissions: ['storage', 'alarms', 'nativeMessaging', 'contextMenus', 'offscreen', 'debugger', 'tabs', 'tabGroups', 'sidePanel'],
   },
   {
     browser: 'edge',
     manifestPath: 'dist/edge-mv3/manifest.json',
-    permissions: ['storage', 'alarms', 'nativeMessaging', 'contextMenus', 'offscreen', 'sidePanel'],
+    permissions: ['storage', 'alarms', 'nativeMessaging', 'contextMenus', 'offscreen', 'debugger', 'tabs', 'tabGroups', 'sidePanel'],
   },
   {
     browser: 'firefox',
@@ -81,6 +81,8 @@ for (const target of targets) {
 
 const background = readText('entrypoints/background.ts');
 const nativeTransport = readText('core/mcp/transports/native.ts');
+const browserControlConnection = readText('core/browser-control/cdp.ts');
+const browserControlService = readText('core/browser-control/service.ts');
 const wxtConfig = readText('wxt.config.ts');
 const privacyPolicy = readText('docs/chrome-web-store/privacy-policy.md');
 const submission = readText('docs/chrome-web-store/submission.md');
@@ -92,6 +94,9 @@ assertIncludes(background, 'chrome.contextMenus.create', 'contextMenus permissio
 assertIncludes(background, 'chrome.contextMenus.onClicked.addListener', 'contextMenus permission must handle clicks');
 assertIncludes(background, 'chrome.offscreen.createDocument', 'offscreen permission must create an offscreen document');
 assertIncludes(background, 'chrome.sidePanel', 'sidePanel permission must use the side panel API');
+assertIncludes(browserControlConnection, 'chromeApi.debugger', 'debugger permission must use the debugger API');
+assertIncludes(browserControlService, 'chromeApi.tabs', 'tabs permission must use the tabs API');
+assertIncludes(browserControlService, 'chromeApi.tabGroups', 'tabGroups permission must use the tabGroups API');
 assertIncludes(wxtConfig, 'web_accessible_resources', 'web accessible resources must be declared in manifest config');
 assertIncludes(wxtConfig, "default_locale: 'en'", 'manifest config must declare default locale');
 assertIncludes(wxtConfig, '__MSG_extension_name__', 'manifest config must use localized name');
@@ -99,7 +104,7 @@ assertIncludes(wxtConfig, '__MSG_extension_description__', 'manifest config must
 assertIncludes(wxtConfig, '__MSG_extension_action_title__', 'manifest config must use localized action title');
 assertIncludes(wxtConfig, 'pyodideAssetsPlugin', 'manifest build must bundle Pyodide assets for browser Python sandbox');
 
-for (const permission of ['storage', 'alarms', 'contextMenus', 'nativeMessaging', 'offscreen', 'sidePanel']) {
+for (const permission of ['storage', 'alarms', 'contextMenus', 'nativeMessaging', 'offscreen', 'debugger', 'tabs', 'tabGroups', 'sidePanel']) {
   assertIncludes(privacyPolicy, `\`${permission}\``, `privacy policy must document ${permission}`);
   assertIncludes(submission, `#### \`${permission}\``, `Chrome Web Store submission notes must justify ${permission}`);
 }

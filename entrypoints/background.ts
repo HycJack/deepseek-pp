@@ -58,6 +58,14 @@ import {
   getRuntimeToolDescriptors,
   refreshRuntimeToolDescriptors,
 } from '../core/tool/runtime';
+import {
+  browserControlService,
+  getBrowserControlSettings,
+  getBrowserControlState,
+  saveBrowserControlSettings,
+  setBrowserControlEnabled,
+  type BrowserControlSettings,
+} from '../core/browser-control';
 import { filterSidepanelChatToolDescriptors } from '../core/tool/sidepanel';
 import {
   addProjectFiles,
@@ -159,6 +167,7 @@ import {
 import { normalizeConversationExportRequest } from '../core/export/schema';
 import { buildPromptAugmentation } from '../core/prompt';
 import { extractToolCalls } from '../core/interceptor/tool-parser';
+import { broadcastRuntimeUpdate } from '../core/messaging/broadcast';
 import {
   createTranslator,
   DEFAULT_LOCALE,
@@ -692,6 +701,41 @@ async function handleMessage(
       return { ok: true };
     }
 
+    case 'GET_BROWSER_CONTROL_SETTINGS':
+      return getBrowserControlSettings();
+
+    case 'SAVE_BROWSER_CONTROL_SETTINGS': {
+      const settings = await saveBrowserControlSettings(message.payload as Partial<BrowserControlSettings>);
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      await broadcastBrowserControlUpdate(sender.tab?.id);
+      return settings;
+    }
+
+    case 'SET_BROWSER_CONTROL_ENABLED': {
+      const { enabled } = message.payload as { enabled: boolean };
+      const settings = await setBrowserControlEnabled(enabled);
+      if (!enabled) await browserControlService.detach();
+      await broadcastToolDescriptorsUpdate(sender.tab?.id);
+      await broadcastBrowserControlUpdate(sender.tab?.id);
+      return settings;
+    }
+
+    case 'GET_BROWSER_CONTROL_STATE':
+      return getBrowserControlState();
+
+    case 'SET_BROWSER_CONTROL_TARGET': {
+      const { tabId } = message.payload as { tabId: number };
+      const target = await browserControlService.setTarget(tabId);
+      await broadcastBrowserControlUpdate(sender.tab?.id);
+      return { ok: true, target };
+    }
+
+    case 'DETACH_BROWSER_CONTROL': {
+      await browserControlService.detach();
+      await broadcastBrowserControlUpdate(sender.tab?.id);
+      return { ok: true };
+    }
+
     case 'DIAGNOSE_WEB_SEARCH': {
       const q = typeof (message.payload as { query?: string })?.query === 'string'
         ? (message.payload as { query: string }).query : 'test';
@@ -1080,17 +1124,13 @@ async function handleMessage(
 }
 
 async function broadcastToTabs(payload: Record<string, unknown>, excludeTabId?: number) {
-  chrome.runtime.sendMessage(payload).catch(() => {});
-
-  const tabs = await chrome.tabs.query({ url: DEEPSEEK_TAB_URL_PATTERN });
-  for (const tab of tabs) {
-    if (tab.id && tab.id !== excludeTabId) {
-      chrome.tabs.sendMessage(tab.id, payload).catch(() => {});
-    }
-  }
-  if (excludeTabId) {
-    chrome.tabs.sendMessage(excludeTabId, payload).catch(() => {});
-  }
+  await broadcastRuntimeUpdate(payload, excludeTabId, {
+    tabUrlPattern: DEEPSEEK_TAB_URL_PATTERN,
+    sendRuntimeMessage: (message) => chrome.runtime.sendMessage(message),
+    queryTabsByUrl: (urlPattern) => chrome.tabs.query({ url: urlPattern }),
+    sendTabMessage: (tabId, message) => chrome.tabs.sendMessage(tabId, message),
+    reportError: reportBackgroundStartupError,
+  });
 }
 
 async function loadOrRefreshClientHeaders(preferredTabId?: number): Promise<Record<string, string> | null> {
@@ -1157,6 +1197,10 @@ async function broadcastMcpServersUpdate(excludeTabId?: number) {
 async function broadcastToolDescriptorsUpdate(excludeTabId?: number) {
   const toolDescriptors = await getRuntimeToolDescriptors(currentBackgroundLocale);
   await broadcastToTabs({ type: 'TOOL_DESCRIPTORS_UPDATED', toolDescriptors }, excludeTabId);
+}
+
+async function broadcastBrowserControlUpdate(excludeTabId?: number) {
+  await broadcastToTabs({ type: 'BROWSER_CONTROL_UPDATED' }, excludeTabId);
 }
 
 async function broadcastToolCallHistoryUpdate(excludeTabId?: number) {

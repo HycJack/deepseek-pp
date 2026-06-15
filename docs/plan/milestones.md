@@ -2,9 +2,18 @@
 
 | # | Milestone | Target Phase | Criteria | Status |
 |:--|:--|:--|:--|:--|
-| 1 | Architecture foundation ready | After Phase 1 | Platform contracts, bridge schemas, prompt context ordering, renderer registry, and browser fixture baseline are in place | Pending |
-| 2 | Core Better-style workflows usable | After Phase 2 | Project context/RAG and generated artifact delivery work in browser extension path with tests | Pending |
-| 3 | Android baseline usable | After Phase 3 | Android bundle, WebView host, bridge, capability gating, and validation docs exist; validation state is explicit | Pending |
-| 4 | Interaction upgrades shipped | After Phase 4 | Sandbox runner, voice, skill creator, memory import, saved snippets, and prompt controls are implemented or explicitly scoped | Pending |
-| 5 | Secondary product surfaces decided | After Phase 5 | Organization/export/API/playground/UX/custom CSS decisions are implemented or documented with go/no-go rationale | Pending |
-| 6 | Release-quality closure | After Phase 6 | Full validation matrix, public docs, GitHub progress, and archive readiness are complete | Pending |
+| 1 | Browser Control Contracts Ready | After Phase 1 | Contracts, settings, platform capabilities, Chromium permissions, policy checks, and permission docs are aligned | Done locally |
+| 2 | Background Runtime Ready | After Phase 2 | CDP connection, controlled tabs/groups, and AX snapshot manager are implemented and tested with mocked Chrome APIs | Done locally |
+| 3 | Browser Action Tools Ready | After Phase 3 | Navigation, observation, and input action tools are exposed through one local provider and pass runtime tests | Done locally |
+| 4 | Tool Loops Unified | After Phase 4 | Manual chat, sidepanel chat, inline agent, and automation share browser-control execution without large payload regressions | Done locally |
+| 5 | User Control Surface Ready | After Phase 5 | Sidepanel exposes Browser Control enable/status/target/detach controls with i18n | Done locally |
+| 6 | Release Readiness | After Phase 6 | Chrome smoke, docs, manifest policy, full validation, and diff review are complete | Automated validation done; live Chrome smoke pending |
+
+## GitHub Milestone Titles
+
+- `Phase 1: Contracts, Capabilities, and Permissions`
+- `Phase 2: Background Browser-Control Runtime`
+- `Phase 3: Browser Action Tools`
+- `Phase 4: Tool-Loop and Result Integration`
+- `Phase 5: Sidepanel Browser Control UI`
+- `Phase 6: Verification, Documentation, and Release Readiness`

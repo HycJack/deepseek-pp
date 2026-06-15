@@ -12,7 +12,8 @@ interface Props {
 
 const SOURCE_LABELS: Record<string, { labelKey: LocaleMessageKey; className: string }> = {
   builtin: { labelKey: 'sidepanel.skill.sources.builtin', className: 'ds-badge-info' },
-  official: { labelKey: 'sidepanel.skill.sources.official', className: 'ds-badge-success' },
+  official: { labelKey: 'sidepanel.skill.sources.official', className: 'ds-badge-warning' },
+  'third-party': { labelKey: 'sidepanel.skill.sources.thirdParty', className: 'ds-badge-warning' },
   custom: { labelKey: 'sidepanel.skill.sources.custom', className: 'ds-badge-warning' },
   remote: { labelKey: 'sidepanel.skill.sources.remote', className: 'ds-badge-info' },
 };

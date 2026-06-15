@@ -45,7 +45,7 @@ function createManifest(env: ConfigEnv): UserManifest {
   const isFirefox = env.browser === 'firefox';
   const isChromiumTarget = CHROMIUM_BROWSERS.has(env.browser);
   const permissions = ['storage', 'alarms', 'nativeMessaging', 'contextMenus'];
-  const chromiumPermissions = [...permissions, 'offscreen'];
+  const chromiumPermissions = [...permissions, 'offscreen', 'debugger', 'tabs', 'tabGroups'];
 
   return {
     default_locale: 'en',

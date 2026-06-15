@@ -10,7 +10,12 @@ export type PlatformCapability =
   | 'sidePanel'
   | 'nativeMessaging'
   | 'contextMenus'
-  | 'alarms';
+  | 'alarms'
+  | 'tabs'
+  | 'tabGroups'
+  | 'debugger'
+  | 'browserControl'
+  | 'accessibilityTree';
 
 export type PlatformCapabilityMap = Record<PlatformCapability, boolean>;
 
@@ -70,6 +75,11 @@ export const EMPTY_PLATFORM_CAPABILITIES: PlatformCapabilityMap = {
   nativeMessaging: false,
   contextMenus: false,
   alarms: false,
+  tabs: false,
+  tabGroups: false,
+  debugger: false,
+  browserControl: false,
+  accessibilityTree: false,
 };
 
 export function createCapabilityMap(
@@ -88,6 +98,8 @@ export function isCapabilitySupported(
 export function getCurrentBrowserExtensionEnvironment(): PlatformEnvironment {
   const runtime = safeChromeRuntime();
   const chromeApi = safeChrome();
+  const debuggerSupported = Boolean(chromeApi?.debugger?.attach && chromeApi.debugger.sendCommand);
+  const tabsSupported = Boolean(chromeApi?.tabs?.query && chromeApi.tabs.get);
   return {
     kind: 'browser_extension',
     name: 'WebExtension',
@@ -102,6 +114,11 @@ export function getCurrentBrowserExtensionEnvironment(): PlatformEnvironment {
       nativeMessaging: Boolean(runtime?.connectNative || runtime?.sendNativeMessage),
       contextMenus: Boolean(chromeApi?.contextMenus),
       alarms: Boolean(chromeApi?.alarms),
+      tabs: tabsSupported,
+      tabGroups: Boolean(chromeApi?.tabGroups),
+      debugger: debuggerSupported,
+      browserControl: debuggerSupported && tabsSupported,
+      accessibilityTree: debuggerSupported,
     }),
   };
 }
@@ -125,6 +142,11 @@ export function getCurrentPlatformEnvironment(): PlatformEnvironment {
         nativeMessaging: false,
         contextMenus: false,
         alarms: false,
+        tabs: false,
+        tabGroups: false,
+        debugger: false,
+        browserControl: false,
+        accessibilityTree: false,
       }),
     };
   }

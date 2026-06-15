@@ -7,25 +7,46 @@ import {
   type PromptPresetCadence,
 } from '../../../core/prompt/settings';
 import { useI18n } from '../i18n';
+import { getRuntimeErrorMessage, unwrapRuntimeResponse } from '../runtime-response';
 
 export default function PromptControlPanel() {
   const { t } = useI18n();
   const [settings, setSettings] = useState<PromptInjectionSettings>(DEFAULT_PROMPT_INJECTION_SETTINGS);
+  const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'GET_PROMPT_INJECTION_SETTINGS' })
-      .then((result) => setSettings(normalizePromptInjectionSettings(result)))
-      .catch(() => setSettings(DEFAULT_PROMPT_INJECTION_SETTINGS));
-  }, []);
+      .then((result) => {
+        const loaded = unwrapRuntimeResponse<PromptInjectionSettings>(
+          result,
+          t('sidepanel.promptControls.backendUnavailable'),
+        );
+        setSettings(normalizePromptInjectionSettings(loaded));
+      })
+      .catch((error) => {
+        setSettings(DEFAULT_PROMPT_INJECTION_SETTINGS);
+        setStatusMessage(t('sidepanel.promptControls.loadFailed', { error: getRuntimeErrorMessage(error) }));
+      });
+  }, [t]);
 
   const save = async (patch: Partial<PromptInjectionSettings>) => {
+    const previous = settings;
     const next = normalizePromptInjectionSettings({ ...settings, ...patch });
     setSettings(next);
-    const saved = await chrome.runtime.sendMessage({
-      type: 'SAVE_PROMPT_INJECTION_SETTINGS',
-      payload: next,
-    });
-    setSettings(normalizePromptInjectionSettings(saved));
+    setStatusMessage('');
+    try {
+      const saved = unwrapRuntimeResponse<PromptInjectionSettings>(
+        await chrome.runtime.sendMessage({
+          type: 'SAVE_PROMPT_INJECTION_SETTINGS',
+          payload: next,
+        }),
+        t('sidepanel.promptControls.backendUnavailable'),
+      );
+      setSettings(normalizePromptInjectionSettings(saved));
+    } catch (error) {
+      setSettings(previous);
+      setStatusMessage(t('sidepanel.promptControls.saveFailed', { error: getRuntimeErrorMessage(error) }));
+    }
   };
 
   return (
@@ -79,6 +100,12 @@ export default function PromptControlPanel() {
             <option value="en">{t('sidepanel.promptControls.languageEn')}</option>
           </select>
         </label>
+
+        {statusMessage && (
+          <div className="text-[11px] rounded-lg px-2 py-1.5" style={{ color: 'var(--ds-text-secondary)', background: 'var(--ds-surface)' }}>
+            {statusMessage}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -104,6 +131,7 @@ function ToggleRow({
         </div>
       </div>
       <button
+        type="button"
         onClick={() => onToggle(!enabled)}
         className="relative shrink-0 w-10 h-[22px] rounded-full transition-colors duration-200"
         style={{ background: enabled ? 'var(--ds-blue)' : 'var(--ds-border)' }}

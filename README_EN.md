@@ -194,11 +194,11 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 
 ### OfficeCLI Document Tools
 
-- **Built-in `/officecli` Skill** - A controlled workflow for inspecting, locating issues, validating, and editing `.docx`, `.xlsx`, and `.pptx` files.
-- **Official Skill library** - Includes official OfficeCLI Skills for DOCX, XLSX, PPTX, Pitch Deck, Academic Paper, Financial Model, Dashboard, Morph PPT, and more.
-- **Official style library** - Includes the official OfficeCLI PPT styles index and style descriptions, with chainable loading such as `/officecli-pptx /officecli-styles ...`.
+- **Built-in `/officecli` Skill** - A controlled workflow for inspecting, locating issues, validating, and editing `.docx`, `.xlsx`, and `.pptx` files. Disabled by default and enabled manually from the Skills page.
+- **Third-party Skill library** - Includes OfficeCLI Skills for DOCX, XLSX, PPTX, Pitch Deck, Academic Paper, Financial Model, Dashboard, Morph PPT, and more.
+- **Third-party style library** - Includes the OfficeCLI PPT styles index and style descriptions, with chainable loading such as `/officecli-pptx /officecli-styles ...`.
 - **Runs through Shell MCP** - After creating the Shell preset in the side panel, the model can call command-based OfficeCLI through `shell_exec`.
-- **Automatic command-line installation** - `deepseek-pp-shell-host` installs the command-based OfficeCLI binary from official iOfficeAI/OfficeCLI release assets according to your OS and processor type.
+- **Automatic command-line installation** - `deepseek-pp-shell-host` installs the command-based OfficeCLI binary from iOfficeAI/OfficeCLI release assets according to your OS and processor type.
 - **Command mode first** - The Skill checks that `officecli --help` exposes scriptable commands such as `view`, `get`, `set`, and `batch`.
 - **Rejects hosted quota generation paths** - If the current binary only exposes hosted generation commands such as `new --prompt`, the Skill stops and asks you to switch to the command-based OfficeCLI binary.
 - **Real local paths** - Document paths come from the user or from Shell MCP queries. The workflow does not guess placeholder directories.
@@ -231,7 +231,7 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 
 ### Skill System
 
-- **Built-in Skills** - Includes ready-to-use general collaboration Skills and official OfficeCLI document Skills.
+- **Built-in Skills** - Includes ready-to-use general collaboration Skills and manually enabled third-party OfficeCLI document Skills.
 - **Custom Skills** - Create your own Skills in the side panel with system instructions and parameters.
 - **GitHub import** - Preview and import third-party Skills from a GitHub repository, directory, or direct `SKILL.md` link.
 - **Source and update metadata** - GitHub-imported Skills show source repository, version, license, sync time, and upstream update checks.
@@ -499,7 +499,7 @@ Thanks to this release's contributors: [@todayzhou](https://github.com/todayzhou
 
 | Area | Main changes |
 |------|--------------|
-| OfficeCLI document tools | Adds official OfficeCLI Skills and style libraries, plus a Shell MCP preset and install script so DeepSeek can inspect, read, edit, and validate Office files through command-based OfficeCLI. |
+| OfficeCLI document tools | Adds third-party OfficeCLI Skills and style libraries, plus a Shell MCP preset and install script so DeepSeek can inspect, read, edit, and validate Office files through command-based OfficeCLI. |
 | Agentic continuation | MCP tool results can return to the same conversation, letting DeepSeek keep deciding next steps like Claude Code or Codex. Continuous execution is shown by step and supports stopping and refresh recovery. |
 | Output speed display | Shows live `tok/s` while responses are generated, making output state easier to read. |
 | Automation tasks | Supports manual or scheduled task triggers with independent conversations, immediate run, cron/RRULE scheduling, pause/edit/delete, and reuse of the continuation workflow. |

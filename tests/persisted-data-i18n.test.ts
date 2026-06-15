@@ -158,9 +158,10 @@ describe('persisted user data i18n boundaries', () => {
       name: 'remote-original',
       description: '远端描述',
       instructions: 'Keep command: officecli view "D:\\\\文档\\\\a.docx"',
-      source: 'remote',
+      source: 'third-party',
       memoryEnabled: false,
-      enabled: true,
+      enabled: false,
+      metadata: { provider: 'iOfficeAI/OfficeCLI' },
     };
     const preset: SystemPromptPreset = {
       id: 'preset-sync',

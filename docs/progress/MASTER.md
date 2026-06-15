@@ -1,15 +1,15 @@
-# Better DeepSeek Capability Adoption — Progress Tracker
+# Browser Control Parity — Progress Tracker
 
-> **Task**: Incorporate high-value Better DeepSeek capabilities that DeepSeek++ does not currently support, with Android WebView support explicitly in scope.
-> **Started**: 2026-06-11
-> **Last Updated**: 2026-06-11
+> **Task**: Implement Gemini-Nexus parity browser control in DeepSeek++ with Chromium CDP, Accessibility Tree UID snapshots, controlled tabs/groups, browser action tools, sidepanel controls, and validation.
+> **Started**: 2026-06-14
+> **Last Updated**: 2026-06-14
 > **Mode**: GITHUB_STANDARD
 > **Repo**: zhu1090093659/deepseek-pp
 
 ## GitHub Resources
 
 - **All Issues**: `gh issue list -R zhu1090093659/deepseek-pp --label "spec-driven" --state all`
-- **Current Spec Issues**: `gh issue list -R zhu1090093659/deepseek-pp --milestone "Phase 6: Hardening, Documentation, and Release Readiness" --state open`
+- **Browser Control Issues**: `gh issue list -R zhu1090093659/deepseek-pp --search "Browser Control Parity" --state all`
 - **Project Board**: unavailable in current `gh` auth scope; mode is `GITHUB_STANDARD`.
 
 ## References
@@ -25,153 +25,77 @@
 
 | Phase | Name | Milestone URL | Open | Closed | Total |
 |:--|:--|:--|--:|--:|--:|
-| 1 | Foundation Contracts and Seams | https://github.com/zhu1090093659/deepseek-pp/milestone/31 | 5 | 0 | 5 |
-| 2 | P0 Project Context and Artifact Delivery | https://github.com/zhu1090093659/deepseek-pp/milestone/32 | 6 | 0 | 6 |
-| 3 | Android WebView Baseline | https://github.com/zhu1090093659/deepseek-pp/milestone/33 | 5 | 0 | 5 |
-| 4 | P1 Interactive Agent Tools | https://github.com/zhu1090093659/deepseek-pp/milestone/34 | 6 | 0 | 6 |
-| 5 | P2 Organization, Export, and Product Surfaces | https://github.com/zhu1090093659/deepseek-pp/milestone/35 | 5 | 0 | 5 |
-| 6 | Hardening, Documentation, and Release Readiness | https://github.com/zhu1090093659/deepseek-pp/milestone/36 | 3 | 0 | 3 |
-
-> GitHub open/closed counts reflect remote issue state. The P0/P1/P2/Phase 6 passes below have been implemented locally on `main`; GitHub Issues remain open until push reconciliation.
-> Archive copy is prepared under `docs/archives/better-deepseek-capability-adoption/`.
+| 1 | Contracts, Capabilities, and Permissions | https://github.com/zhu1090093659/deepseek-pp/milestone/37 | 3 | 0 | 3 |
+| 2 | Background Browser-Control Runtime | https://github.com/zhu1090093659/deepseek-pp/milestone/38 | 3 | 0 | 3 |
+| 3 | Browser Action Tools | https://github.com/zhu1090093659/deepseek-pp/milestone/39 | 4 | 0 | 4 |
+| 4 | Tool-Loop and Result Integration | https://github.com/zhu1090093659/deepseek-pp/milestone/40 | 3 | 0 | 3 |
+| 5 | Sidepanel Browser Control UI | https://github.com/zhu1090093659/deepseek-pp/milestone/41 | 3 | 0 | 3 |
+| 6 | Verification, Documentation, and Release Readiness | https://github.com/zhu1090093659/deepseek-pp/milestone/42 | 3 | 0 | 3 |
 
 ## Issue Mapping
 
 | Task ID | Issue | Title | Status |
 |:--|:--|:--|:--|
-| T1.1 | #152 | Define platform service contracts for storage, runtime messaging, downloads, file picking, asset URLs, and environment capabilities | implemented locally |
-| T1.2 | #153 | Add runtime bridge message schemas for MAIN/content/background/platform communication | implemented locally |
-| T1.3 | #154 | Define prompt context ordering contract for preset, Skill, memory, project context, and tool instructions | implemented locally |
-| T1.4 | #155 | Extract content card renderer registry from the large content entrypoint | implemented locally |
-| T1.5 | #156 | Add minimal browser e2e fixture harness for DOM injections | open |
-| T2.1 | #157 | Add Project and ProjectFile schemas, stores, migrations, and sync boundary rules | implemented locally |
-| T2.2 | #158 | Add GitHub repo, web page, and local folder source readers for project context | implemented locally |
-| T2.3 | #159 | Add project RAG retrieval and prompt injection budget integration | implemented locally |
-| T2.4 | #160 | Add Projects UI and attach menu for active project/files | implemented locally |
-| T2.5 | #161 | Add generated artifact local tool provider for single-file outputs | implemented locally |
-| T2.6 | #162 | Add multi-file project bundle workflow equivalent to LONG_WORK | implemented locally |
-| T3.1 | #163 | Add Android web-bundle build target and asset staging | implemented locally |
-| T3.2 | #164 | Add Kotlin WebView host, asset loader, cookie/login handling, and injection lifecycle | implemented locally; APK build blocked locally by missing JDK |
-| T3.3 | #165 | Implement Android bridge for storage, downloads, file/folder picking, theme, and locale | implemented locally |
-| T3.4 | #166 | Add Android capability gating for native messaging, Shell, sidePanel-only UI, and unsupported browser APIs | implemented locally |
-| T3.5 | #167 | Add Android test/CI documentation and smoke commands | open |
-| T4.1 | #168 | Add isolated browser sandbox code runner for JS/TS/Python/HTML where available | implemented locally |
-| T4.2 | #169 | Add optional voice input and response read-aloud | implemented locally |
-| T4.3 | #170 | Add AI-assisted Skill creator tool with review-before-save | implemented locally |
-| T4.4 | #171 | Add memory import from another AI workflow | implemented locally |
-| T4.5 | #172 | Add saved items, bookmarks, and snippets with prompt insertion | implemented locally |
-| T4.6 | #173 | Add prompt injection controls: disable memory/system prompt, preset cadence, force response language | implemented locally |
-| T5.1 | #174 | Add chat tags, filtering, and history search adapters for DeepSeek sidebar | implemented locally |
-| T5.2 | #175 | Extend export to message-level, saved-item, and image outputs | implemented locally |
-| T5.3 | #176 | Add API playground behind explicit developer/user setting | implemented locally |
-| T5.4 | #177 | Add small UX polish: code block downloads, native navigation patch, local what's-new panel | implemented locally |
-| T5.5 | #178 | Decide custom CSS/theme preset policy; implement only if compatible with store/product posture | implemented locally |
-| T6.1 | #179 | Run and fix full validation matrix across compile, tests, prompt freeze, browser builds, smoke checks, and Android best-available checks | implemented locally; Android Gradle blocked by missing JDK |
-| T6.2 | #180 | Update README, README_EN, store-facing docs, and Android install/developer docs | implemented locally |
-| T6.3 | #181 | Final progress reconciliation and archive preparation | implemented locally |
+| T1.1 | #189 | Add browser-control contracts and settings | local done; GitHub open |
+| T1.2 | #190 | Add platform capability gates for browser control | local done; GitHub open |
+| T1.3 | #191 | Update manifest permissions and policy docs | local done; GitHub open |
+| T2.1 | #192 | Implement CDP connection adapter | local done; GitHub open |
+| T2.2 | #193 | Implement controlled tab and tab group manager | local done; GitHub open |
+| T2.3 | #194 | Implement Accessibility Tree snapshot manager | local done; GitHub open |
+| T3.1 | #195 | Implement navigation and page tools | local done; GitHub open |
+| T3.2 | #196 | Implement observation tools | local done; GitHub open |
+| T3.3 | #197 | Implement input tools | local done; GitHub open |
+| T3.4 | #198 | Add browser-control descriptors and runtime dispatch | local done; GitHub open |
+| T4.1 | #199 | Integrate manual and sidepanel chat observations | local done; GitHub open |
+| T4.2 | #200 | Integrate inline agent and automation browser-control policy | local done; GitHub open |
+| T4.3 | #201 | Add result budget and restore behavior | local done; GitHub open |
+| T5.1 | #202 | Add Browser Control sidepanel page | local done; GitHub open |
+| T5.2 | #203 | Add background browser-control message API | local done; GitHub open |
+| T5.3 | #204 | Add browser-control i18n and navigation | local done; GitHub open |
+| T6.1 | #205 | Add real Chrome browser-control smoke fixture and script | pending live Chrome smoke |
+| T6.2 | #206 | Update docs and Chrome Web Store permission copy | local done; GitHub open |
+| T6.3 | #207 | Run full validation and final diff review | local done; GitHub open |
 
 ## Quick Status Commands
 
 ```bash
 # Phase progress
 gh api repos/zhu1090093659/deepseek-pp/milestones \
-  --jq '.[] | select(.number >= 31 and .number <= 36) | "\(.title): \(.open_issues) open, \(.closed_issues) closed"'
+  --jq '.[] | select(.number >= 37 and .number <= 42) | "\(.title): \(.open_issues) open, \(.closed_issues) closed"'
 
 # Open tasks for the active phase
 gh issue list -R zhu1090093659/deepseek-pp \
-  --milestone "Phase 6: Hardening, Documentation, and Release Readiness" \
+  --milestone "Phase 1: Contracts, Capabilities, and Permissions" \
   --state open \
   --json number,title
 
-# All current spec tasks
+# All current browser-control spec tasks
 gh issue list -R zhu1090093659/deepseek-pp \
-  --label "spec-driven" \
+  --milestone "Phase 1: Contracts, Capabilities, and Permissions" \
   --state all \
   --json number,title,state,milestone
 ```
 
 ## Phase Checklist
 
-- [x] Phase 1: Foundation Contracts and Seams (local P0 4/4 implemented; T1.5 remains P1) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/31)
-- [x] Phase 2: P0 Project Context and Artifact Delivery (local 6/6 implemented) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/32)
-- [x] Phase 3: Android WebView Baseline (local P0 4/4 implemented; APK validation blocked by missing JDK; T3.5 remains P1 docs/CI) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/33)
-- [x] Phase 4: P1 Interactive Agent Tools (local 6/6 implemented; GitHub Issues remain open until commit/push reconciliation) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/34)
-- [x] Phase 5: P2 Organization, Export, and Product Surfaces (local 5/5 implemented; GitHub Issues remain open until commit/push reconciliation) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/35)
-- [x] Phase 6: Hardening, Documentation, and Release Readiness (local 3/3 implemented; GitHub Issues remain open until push reconciliation) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/36)
+- [x] Phase 1: Contracts, Capabilities, and Permissions (3/3 tasks locally complete) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/37)
+- [x] Phase 2: Background Browser-Control Runtime (3/3 tasks locally complete) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/38)
+- [x] Phase 3: Browser Action Tools (4/4 tasks locally complete) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/39)
+- [x] Phase 4: Tool-Loop and Result Integration (3/3 tasks locally complete) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/40)
+- [x] Phase 5: Sidepanel Browser Control UI (3/3 tasks locally complete) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/41)
+- [ ] Phase 6: Verification, Documentation, and Release Readiness (2/3 tasks locally complete; live Chrome smoke pending) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/42)
 
 ## Current Status
 
-**Active Phase**: Complete locally.
-**Active Task**: None. Remaining external reconciliation is push/remote issue closure after the local stack is reviewed.
-**Blockers**: Android APK/Gradle validation is blocked on this machine because `java -version` reports no Java Runtime. `npm run android:assemble:debug` stops at the explicit JDK check.
-
-## Latest P0 Validation
-
-| Command | Result | Notes |
-|:--|:--|:--|
-| `npm run compile` | pass | TypeScript contracts compile |
-| `npm test` | pass | 18 test files, 84 tests |
-| `npm run prompt:freeze` | pass | Updated hash for intentional project-context prompt ordering |
-| `npm run verify:i18n` | pass | Locale parity and hardcoded Chinese audit pass |
-| `npm run verify:automation` | pass | Automation contract smoke pass |
-| `npm run smoke:pow` | pass | DeepSeek PoW smoke pass |
-| `npm run smoke:mcp` | pass | MCP descriptor/parser/timeout smoke pass |
-| `npm run verify:mcp:mock` | pass | Manual and automation continuation mock pass |
-| `npm run smoke:shell` | pass | 12 Shell host smoke checks pass |
-| `npm run build:android` | pass | Chrome MV3 build and Android asset staging pass |
-| `npm run build:all` | pass | Chrome, Edge, Firefox MV3 builds pass |
-| `npm run verify:manifest-policy` | pass | Manifest policy check pass |
-| `npm run audit:prod` | pass | 0 high production vulnerabilities |
-| `npm run android:assemble:debug` | blocked | Missing local JDK; APK not built |
-| `git diff --check` | pass | No whitespace errors |
-
-## Latest P1 Validation
-
-| Command | Result | Notes |
-|:--|:--|:--|
-| `npx vitest run tests/p1-interactive-tools.test.ts tests/request-augmentation.test.ts tests/sync-schema.test.ts tests/tool-result-renderer.test.ts` | pass | 4 test files, 22 tests |
-| `npm run compile` | pass | TypeScript contracts compile |
-| `npm test` | pass | 19 test files, 96 tests |
-| `npm run prompt:freeze` | pass | Updated hash for intentional prompt controls and prompt locale changes |
-| `npm run verify:i18n` | pass | Locale parity and hardcoded Chinese audit pass |
-| `npm run verify:automation` | pass | Automation contract smoke pass |
-| `npm run verify:manifest-policy` | pass | Manifest policy check pass |
-| `npm run build:all` | pass | Chrome, Edge, Firefox MV3 builds pass |
-| `git diff --check` | pass | No whitespace errors |
-
-## Latest P2 Validation
-
-| Command | Result | Notes |
-|:--|:--|:--|
-| `npx vitest run tests/phase5-product-surfaces.test.ts tests/conversation-export.test.ts tests/i18n.test.ts` | pass | 3 test files, 30 tests |
-| `npm run compile` | pass | TypeScript contracts compile |
-| `npm test` | pass | 20 test files, 102 tests |
-| `npm run prompt:freeze` | pass | Prompt freeze passed, 11 cases |
-| `npm run verify:i18n` | pass | Locale parity and hardcoded Chinese audit pass |
-| `npm run verify:automation` | pass | Automation contract smoke pass |
-| `npm run build:all` | pass | Chrome, Edge, Firefox MV3 builds pass |
-| `npm run verify:manifest-policy` | pass | Manifest policy check pass |
-| `git diff --check` | pass | No whitespace errors |
-
-## Latest Phase 6 Validation
-
-| Command | Result | Notes |
-|:--|:--|:--|
-| `npm run ci:quality` | pass | Workflow lint, prod audit, prompt freeze, compile, 20 Vitest files / 103 tests, i18n, automation, MCP mock/smoke, Shell smoke, PoW smoke, build:all, manifest policy, zip:all, release asset check |
-| `npm run smoke:web` | pass | 22/22 web_search and continuation prompt checks pass |
-| `npm run build:android` | pass | Chrome MV3 build and Android asset staging pass; 31 files staged |
-| `java -version` | blocked | No Java Runtime installed on this machine |
-| `npm run android:assemble:debug` | blocked | Stops at explicit JDK check; APK not built |
-| `npm run test:android` | blocked | Stops at explicit JDK check; Android unit tests not run |
-| `rg -n "/api/v0\|SSE\|XML\|fetch hook\|interceptor\|ToolDescriptor" README.md README_EN.md docs/chrome-web-store/listing.md docs/chrome-web-store/submission.md android/README.md docs/chrome-web-store/privacy-policy.md` | pass | No internal API/protocol leaks in README/store/Android docs; privacy policy only mentions local storage technology |
-| `npm run zip:all && npm run verify:release-assets` | pass | Release zips and asset policy pass after docs update |
-| `git diff --check` | pass | No whitespace errors |
+**Active Phase**: Phase 6 — Verification, Documentation, and Release Readiness.
+**Active Task**: T6.1 / #205 — live Chrome smoke.
+**Blockers**: No automated live Chrome extension smoke was run in this session because it would require loading/reloading the unpacked extension in the user's Chrome profile.
 
 ## Governance Status
 
-**Shared instruction surface**: `AGENTS.md`, auto-generated from Claude project memory. Do not hand-edit for durable rules unless the sync source is also updated.
-**Claude Code instruction surface**: no root `CLAUDE.md`; `.claude/settings.local.json` exists.
-**Other platform rule surfaces**: `.codex/skills/` exists but has no project skill files; no Cursor/Windsurf/Cline rules found.
+**Shared instruction surface**: `AGENTS.md`, auto-generated from Claude project memory. Do not hand-edit unless the sync source is also updated.
+**Claude Code instruction surface**: no root `CLAUDE.md`.
+**Other platform rule surfaces**: `.codex/` exists but no project skill files were found.
 **Memory surface**: Codex native memory.
 **Memory fallback path**: none. Do not create repo-local fallback memory unless explicitly selected.
 
@@ -181,23 +105,20 @@ Per-task telemetry should be written to the corresponding GitHub Issue as commen
 
 ## Notes
 
-- Better DeepSeek reference snapshot: `EdgeTypE/better-deepseek` commit `450168e` from 2026-06-09.
-- Do not copy Better DeepSeek's BDS tag system wholesale. New capabilities should map to DeepSeek++ ToolDescriptor, prompt augmentation, platform, and renderer contracts.
-- Android is in scope, but validation must be explicit: TypeScript tests, Gradle/Kotlin tests, APK build, and emulator/WebView smoke are separate evidence levels.
-- Previous active multilingual runtime support spec artifacts were complete and archived locally under `docs/archives/multilingual-english-runtime-support/`; milestones #26-#30 are closed.
+- The old active Better DeepSeek capability spec was replaced in `docs/analysis`, `docs/plan`, and `docs/progress`; archived copy remains at `docs/archives/better-deepseek-capability-adoption/`.
+- Browser-control tools should be implemented as local DeepSeek++ `ToolDescriptor`s with `browser_*` invocation names, not as external MCP tools.
+- Chromium/Edge are the active target platforms. Firefox and Android must show explicit unsupported state and must not expose executable browser-control tools.
+- Raw full Accessibility Tree snapshots must be budgeted and should not be stored directly in normal tool history.
 
 ## Next Steps
 
-1. Push the local `main` stack when ready.
-2. After push, reconcile GitHub Issues #152-#181 and Milestones #31-#36 from local implemented state to remote closed state.
-3. Install a local JDK before claiming Android APK validation.
+1. Load `dist/chrome-mv3` in Chrome/Edge, enable Browser Control from Capabilities > Browser, select a normal web tab, and run `browser_snapshot`.
+2. Close or update GitHub issues #189-#207 after review/merge policy is selected.
+3. Re-run release validation before publishing any version that includes new Chrome permissions.
 
 ## Session Log
 
 | Date | Session | Summary |
 |:--|:--|:--|
-| 2026-06-11 | Planning | Archived completed multilingual runtime support artifacts, analyzed DeepSeek++ and Better DeepSeek, wrote analysis and plan docs, created GitHub Milestones #31-#36 and Issues #152-#181, and initialized this progress tracker. |
-| 2026-06-11 | P0 implementation | Implemented platform contracts, bridge schemas, prompt project-context ordering, renderer registry, Project Context/RAG, artifact file/zip tools, Projects UI, Android WebView scaffold, Android asset staging scripts, and capability gating. Validation passed except Android APK build, which is blocked by missing local JDK. |
-| 2026-06-11 | P1 implementation | Implemented sandbox approval cards, browser/Python sandbox handoff, voice settings and sidepanel speech controls, Skill draft review cards, memory import preview with per-item rejection, saved snippets/bookmarks, prompt injection controls, saved-item sync boundaries, and P1 tests. TypeScript compile and all Vitest tests passed. |
-| 2026-06-11 | P2 implementation | Implemented DeepSeek history tags/search/filtering, message and saved-item exports, image manifest export format, gated developer API playground, code block downloads, reversible navigation patch, local what's-new panel, and custom CSS/theme policy decision. Full P2 validation matrix passed. |
-| 2026-06-11 | Phase 6 hardening/docs | Ran full `ci:quality`, web smoke, Android best-available checks, docs leakage checks, and release asset verification. Updated README, README_EN, Chrome Web Store listing/submission/privacy docs, Android developer docs, and prepared archive state. Android Gradle remains blocked by missing local JDK. |
+| 2026-06-14 | Planning | Ran spec-driven Phase 0-4 for Gemini-Nexus parity browser control, wrote analysis and plan docs, created GitHub milestones #37-#42 and issues #189-#207, and initialized this tracker. |
+| 2026-06-14 | Implementation | Added local `browser_*` tools, CDP/debugger connection, controlled tabs/groups, Accessibility Tree snapshots, browser actions, runtime/inline-agent integration, sidepanel controls, Chromium permissions, CWS docs, and automated validation. Live Chrome extension smoke remains pending. |

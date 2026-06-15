@@ -1,166 +1,159 @@
 # Task Breakdown
 
+## Confirmed Task Definition
+
+Implement Gemini-Nexus parity browser control in DeepSeek++ as a first-class local capability, not a minimal MVP. The target includes controlled tabs and tab groups, `chrome.debugger`/CDP session management, Accessibility Tree UID snapshots, browser action tools, shared tool-loop integration, sidepanel controls, permission and platform governance, and validation.
+
+## Scope Decisions
+
+- **In scope**: Chromium/Edge browser control using `chrome.debugger`, `chrome.tabs`, and `chrome.tabGroups`.
+- **In scope**: tool parity for navigation, tab/page management, snapshot, click, hover, fill, fill form, key press, type text, attach file, wait for text, dialog handling, and script evaluation.
+- **In scope**: explicit enable/disable/status controls and user-visible detach state.
+- **In scope**: integration with manual DeepSeek chat, sidepanel chat, inline agent, and automation through the existing local tool runtime.
+- **Out of scope for active control**: Firefox and Android WebView execution. They must show explicit unsupported state and must not expose browser-control descriptors.
+- **Tool naming**: use DeepSeek++ XML-safe `browser_*` tool names while matching Gemini-Nexus behavior.
+- **Fallback policy**: physical CDP input may use explicit JS fallback only when the result reports that fallback path; no silent success.
+
 ## Overview
 
-- **Task definition**: Incorporate the high-value Better DeepSeek capabilities that DeepSeek++ does not currently support, with Android WebView support explicitly in scope.
 - **Total Phases**: 6
-- **Total Tasks**: 25
+- **Total Tasks**: 18
 - **Estimated Total Effort**: XL
-- **Tracking Mode**: `GITHUB_STANDARD`
-- **Confirmed Direction**: User delegated prioritization and explicitly called out Android as valuable. Execution still requires the Phase 5 confirmation checkpoint before implementation starts.
+- **Tracking Mode**: GITHUB_STANDARD
 
 ## S.U.P.E.R Design Constraints
 
-- **S (Single Purpose)**: Do not add more responsibilities to `entrypoints/content.ts`, `core/interceptor/fetch-hook.ts`, `SettingsPage.tsx`, or `McpPage.tsx` without extracting focused modules first.
-- **U (Unidirectional Flow)**: Keep flow as platform adapter -> runtime contract -> core service -> UI renderer. Android-specific behavior must not import browser-only concrete implementations.
-- **P (Ports over Implementation)**: Define TypeScript contracts and schemas before implementing project context, artifacts, Android bridge, saved items, voice, and sandbox execution.
-- **E (Environment-Agnostic)**: Browser extension, Android WebView, and native messaging are separate platform capabilities. Unsupported combinations must be explicit, visible, and tested.
-- **R (Replaceable Parts)**: New capabilities should be replaceable through providers/adapters: project sources, artifact writers, platform services, sandbox runners, and voice engines.
+- **S**: Browser-control contracts, CDP connection, snapshot formatting, actions, settings, and UI live in separate modules.
+- **U**: Browser actions flow UI/model -> runtime tool -> browser-control service -> Chrome API -> structured result.
+- **P**: Cross-module I/O uses typed and serializable contracts.
+- **E**: Chromium-only capabilities are capability-gated; unsupported platforms return explicit errors.
+- **R**: CDP transport, snapshot formatter, action handlers, and UI should be replaceable independently.
 
 ## Testing and Governance Constraints
 
-- Feature work must add or update automated tests.
-- Prompt/tool behavior changes must update `prompt:freeze` intentionally.
-- Persisted data changes must update schema tests and WebDAV sync boundary tests.
-- Android validation must distinguish TypeScript unit tests, Gradle/Kotlin tests, APK build, and emulator/WebView smoke. Do not report Android as validated when the required toolchain is missing.
-- Durable implementation rules go to the resolved native memory surface; future-agent rules must be reflected through the canonical instruction sync source, not by hand-editing generated `AGENTS.md`.
+- Feature work requires automated tests.
+- Permission and manifest changes must update `scripts/manifest-policy-check.mjs`, Chrome Web Store docs, and privacy docs.
+- New durable browser-control rules go to the resolved native memory surface if execution reveals them.
+- Do not create a repo-local memory fallback.
 
-## Phase 1: Foundation Contracts and Seams
+## Phase 1: Contracts, Capabilities, and Permissions
 
-**Goal**: Establish the architectural ports needed before adding Better-style capabilities.
-**Prerequisite**: Phase 1 analysis documents complete.
+**Goal**: Establish explicit contracts and platform/manifest truth before adding behavior.
+**Prerequisite**: Phase 1 analysis complete.
 **S.U.P.E.R Focus**: P, E, R.
 
 | # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| T1.1 | Define platform service contracts for storage, runtime messaging, downloads, file picking, asset URLs, and environment capabilities | P0 | M | - | A | P,E,R | Unit tests for browser adapter and capability detection | Record platform capability invariant if accepted | Contracts live under a focused module; browser implementation preserves existing behavior; unsupported capabilities are explicit |
-| T1.2 | Add runtime bridge message schemas for MAIN/content/background/platform communication | P0 | M | - | B | P,U | Unit tests for schema accept/reject cases | Record bridge schema convention | Bridge messages are typed and validated; existing request augmentation and tool restore paths still compile and test |
-| T1.3 | Define prompt context ordering contract for preset, Skill, memory, project context, and tool instructions | P0 | M | - | C | P,U | Request augmentation tests plus prompt-freeze update | Record prompt ordering invariant | Project context can be inserted later without changing memory/Skill semantics; prompt-freeze catches model-facing drift |
-| T1.4 | Extract content card renderer registry from the large content entrypoint | P0 | M | T1.2 | D | S,R | Tests for renderer registration and existing tool block rendering | None unless renderer convention becomes durable | Existing tool cards, export action, and inline agent traces keep behavior; new cards can register without editing unrelated content logic |
-| T1.5 | Add minimal browser e2e fixture harness for DOM injections | P1 | M | T1.2,T1.4 | E | P,E | Playwright or equivalent fixture test for content injection against mock DeepSeek DOM | Record e2e command if adopted | Test harness exercises at least one content script card and one request augmentation path |
+| T1.1 | Add browser-control contracts and settings | P0 | M | — | A | S, P, R | Unit tests for settings normalization and action payload helpers | Update memory only if stable gotcha emerges | Types cover controlled tabs, groups, snapshots, action results, settings; defaults are explicit; no Chrome API imports in pure contracts |
+| T1.2 | Add platform capability gates for browser control | P0 | S | — | B | E, P | Update platform capability tests | None | Capabilities include debugger/tabs/tabGroups/browserControl/accessibilityTree; Firefox/Android are unsupported |
+| T1.3 | Update manifest permissions and policy docs | P0 | M | T1.2 | C | E, P | `npm run build:all` then `npm run verify:manifest-policy` | None | Chromium manifests include required permissions; Firefox omits active control; privacy/submission docs justify permissions |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T1.1 | M | Medium | `core/platform/*`, `core/browser/*` |
-| B | T1.2 | M | Medium | `core/messaging.ts`, `entrypoints/*` |
-| C | T1.3 | M | Medium | `core/prompt/*`, `core/interceptor/request-augmentation.ts`, tests |
-| D | T1.4 | M | High | `entrypoints/content.ts`, `core/ui/*` |
-| E | T1.5 | M | Low | `tests/e2e/*`, fixtures |
+| A | T1.1 | M | Low | `core/browser-control/*` |
+| B | T1.2 | S | Low | `core/platform/*`, `tests/platform-capabilities.test.ts` |
+| C | T1.3 | M | Medium | `wxt.config.ts`, `scripts/manifest-policy-check.mjs`, docs |
 
-## Phase 2: P0 Project Context and Artifact Delivery
+## Phase 2: Background Browser-Control Runtime
 
-**Goal**: Add the highest-value Better DeepSeek workflows that directly improve agentic work: repository/folder context, RAG, and downloadable generated outputs.
-**Prerequisite**: Phase 1 contracts complete.
-**S.U.P.E.R Focus**: S, P, R.
+**Goal**: Add a background-owned CDP runtime, controlled tab registry, and snapshot engine.
+**Prerequisite**: Phase 1.
+**S.U.P.E.R Focus**: S, U, P, E, R.
 
 | # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| T2.1 | Add Project and ProjectFile schemas, stores, migrations, and sync boundary rules | P0 | M | T1.1,T1.3 | A | P,E | Store/schema/sync tests | Record project sync boundary | Project metadata and files have explicit schemas; secrets/local file contents are not synced silently |
-| T2.2 | Add GitHub repo, web page, and local folder source readers for project context | P0 | L | T2.1 | A | S,P,E | Fixture tests for GitHub URLs, branch fallback, binary filtering, size limits, `.gitignore`, and errors | Record source-reader limits | Public/private GitHub and folder flows produce normalized project files with bounded size and clear failures |
-| T2.3 | Add project RAG retrieval and prompt injection budget integration | P0 | M | T1.3,T2.1 | B | P,U,R | Retrieval ranking tests and request augmentation tests | Record prompt budget behavior | Relevant project chunks inject after Skill/preset ordering contract without starving memory/tool instructions |
-| T2.4 | Add Projects UI and attach menu for active project/files | P0 | L | T2.1,T2.2,T2.3 | C | S,R | Component/store tests and e2e fixture coverage if harness exists | None | Users can create projects, import sources, select active files, and see injection status |
-| T2.5 | Add generated artifact local tool provider for single-file outputs | P0 | M | T1.2,T1.4 | D | P,R | Tool parser/runtime tests and content card tests | Record artifact safety limits | Model can request a downloadable file through the existing ToolDescriptor path; file names, MIME, and size are validated |
-| T2.6 | Add multi-file project bundle workflow equivalent to LONG_WORK | P0 | L | T2.5 | D | S,P,R | Bundle tests, card restore tests, prompt-freeze update | Record artifact bundle contract | Multiple generated files are collected into a zip with visible progress and no raw technical tag leakage |
+| T2.1 | Implement CDP connection adapter | P0 | L | T1.1 | A | S, P, E, R | Mock `chrome.debugger` attach/detach/sendCommand tests | None | Handles attach, detach, event forwarding, dialog state, restricted URL errors, and explicit detach cleanup |
+| T2.2 | Implement controlled tab and tab group manager | P0 | L | T1.1, T1.2 | B | S, U, P | Mock `chrome.tabs` and `chrome.tabGroups` tests | None | Supports lock target, active fallback, group create/update/clear, list/select/new/close page scope |
+| T2.3 | Implement Accessibility Tree snapshot manager | P0 | L | T2.1 | C | S, P, R | AX fixture formatter tests, stale UID tests, budget tests | Record snapshot budget rule if changed | Produces pruned UID tree, stable backend id mapping, stale UID errors, and budget metadata |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T2.1, T2.2 | L | Medium | `core/project/*`, source readers, sync tests |
-| B | T2.3 | M | Medium | `core/prompt/*`, `core/project/rag*`, tests |
-| C | T2.4 | L | Medium | `entrypoints/sidepanel/pages/*`, new components |
-| D | T2.5, T2.6 | L | High | `core/tool/*`, card renderer registry, content cards |
+| A | T2.1 | L | Medium | `core/browser-control/connection*` |
+| B | T2.2 | L | Medium | `core/browser-control/tabs*` |
+| C | T2.3 | L | Medium | `core/browser-control/snapshot*` |
 
-## Phase 3: Android WebView Baseline
+## Phase 3: Browser Action Tools
 
-**Goal**: Make DeepSeek++ run as an Android WebView app with explicit capability boundaries.
-**Prerequisite**: Phase 1 platform ports complete. Phase 2 may run partly in parallel, but Android feature parity work depends on stable adapters.
-**S.U.P.E.R Focus**: E, P, R.
+**Goal**: Implement Gemini-Nexus parity action handlers and local tool descriptors.
+**Prerequisite**: Phase 2.
+**S.U.P.E.R Focus**: S, U, P, R.
 
 | # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| T3.1 | Add Android web-bundle build target and asset staging | P0 | M | T1.1 | A | E,R | Build script tests or smoke script; compile/build target | Record Android build commands | `npm run build:android` produces staged JS/CSS/assets without changing browser builds |
-| T3.2 | Add Kotlin WebView host, asset loader, cookie/login handling, and injection lifecycle | P0 | L | T3.1 | A | E,P | Gradle assemble where toolchain exists; Kotlin unit tests for pure helpers | Record validation caveats | WebView loads DeepSeek, injects bundled scripts, preserves cookies, and handles back navigation |
-| T3.3 | Implement Android bridge for storage, downloads, file/folder picking, theme, and locale | P0 | L | T1.1,T3.2 | B | P,E,R | Kotlin unit tests + TypeScript adapter tests | Record bridge security invariant | Android platform adapter passes existing storage/runtime tests; downloads and pickers have clear user-visible errors |
-| T3.4 | Add Android capability gating for native messaging, Shell, sidePanel-only UI, and unsupported browser APIs | P0 | M | T3.3 | C | E,R | Capability matrix tests | Record unsupported-capability rule | Android does not show false-ready controls for Shell/native messaging; unsupported features fail loudly and visibly |
-| T3.5 | Add Android test/CI documentation and smoke commands | P1 | M | T3.1,T3.2,T3.3,T3.4 | D | P,E | Documented commands plus best available local validation | Record Android validation matrix | README/developer docs state toolchain, commands, outputs, and what was actually validated |
+| T3.1 | Implement navigation/page tools | P0 | M | T2.2 | A | S, U, P | Unit tests for args and tab manager calls | None | `browser_list_pages`, `browser_select_page`, `browser_new_page`, `browser_close_page`, `browser_navigate_page` work through scoped registry |
+| T3.2 | Implement observation tools | P0 | M | T2.1, T2.3 | B | S, P, R | Unit tests for snapshot/wait/dialog/evaluate | None | `browser_take_snapshot`, `browser_wait_for`, `browser_handle_dialog`, `browser_evaluate_script` return structured results |
+| T3.3 | Implement input tools | P0 | L | T2.1, T2.3 | C | S, U, P | Unit tests for click/hover/fill/key/type/file | Record fallback rule if changed | `browser_click`, `browser_hover`, `browser_fill`, `browser_fill_form`, `browser_press_key`, `browser_type_text`, `browser_attach_file` support UID resolution and explicit fallback reporting |
+| T3.4 | Add browser-control descriptors and runtime dispatch | P0 | M | T3.1, T3.2, T3.3 | D | P, R | Runtime descriptor/execution tests | None | Browser tools appear only when settings and platform support allow, and execute through one provider |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T3.1, T3.2 | L | Medium | `android/*`, build scripts |
-| B | T3.3 | L | Medium | `android/*`, `core/platform/*` |
-| C | T3.4 | M | Medium | capability stores/UI |
-| D | T3.5 | M | Low | docs, scripts |
+| A | T3.1 | M | Medium | `core/browser-control/actions/navigation*` |
+| B | T3.2 | M | Medium | `core/browser-control/actions/observation*` |
+| C | T3.3 | L | Medium | `core/browser-control/actions/input*` |
+| D | T3.4 | M | High | `core/tool/runtime.ts`, `core/browser-control/tool*` |
 
-## Phase 4: P1 Interactive Agent Tools
+## Phase 4: Tool-Loop and Result Integration
 
-**Goal**: Add the next tier of Better DeepSeek capabilities that improve day-to-day interaction but depend on the P0 contracts.
-**Prerequisite**: Phase 1 complete; individual tasks may depend on Phase 2/3 outputs.
+**Goal**: Make browser control behave consistently across all agent surfaces without reintroducing large-payload regressions.
+**Prerequisite**: Phase 3.
+**S.U.P.E.R Focus**: U, P, E.
+
+| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
+|:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
+| T4.1 | Integrate manual chat and sidepanel chat observations | P0 | M | T3.4 | A | U, P | Tool-loop tests for browser observation continuation | None | Tool results keep model observations useful but history storage compact |
+| T4.2 | Integrate inline agent and automation policy | P0 | M | T3.4 | B | U, E, P | Inline agent and automation tests | None | Browser tools are allowed only when platform/settings support them and use shared provider |
+| T4.3 | Add result budget and restore behavior | P0 | M | T4.1 | C | P, E | History/restore tests for snapshot-heavy outputs | Record budget invariant if changed | Large snapshots are truncated/handled predictably and never freeze UI/history |
+
+### Parallel Lanes
+
+| Lane | Tasks | Combined Effort | Merge Risk | Key Files |
+|:--|:--|:--|:--|:--|
+| A | T4.1 | M | Medium | `entrypoints/background.ts`, `core/tool-loop/*` |
+| B | T4.2 | M | Medium | `core/inline-agent/*`, `core/automation/*`, `entrypoints/content.ts` |
+| C | T4.3 | M | Low | `core/tool/history.ts`, `core/tool/execution-restore.ts` |
+
+## Phase 5: Sidepanel Browser Control UI
+
+**Goal**: Provide a user-visible management surface for enabling, target selection, status, and detach.
+**Prerequisite**: Phase 4.
 **S.U.P.E.R Focus**: S, P, E.
 
 | # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| T4.1 | Add isolated browser sandbox code runner for JS/TS/Python/HTML where available | P1 | L | T1.1,T1.4,T2.5 | A | P,E | Sandbox tests and output-limit tests | Record isolated-execution invariant | Code runs outside the DeepSeek page and returns to the chat through a typed tool result |
-| T4.2 | Add optional voice input and response read-aloud | P1 | M | T1.1 | B | S,E | Adapter tests with unsupported browser fallback | None | Users can enable STT/TTS where platform supports it; unsupported platforms show explicit state |
-| T4.3 | Add AI-assisted Skill creator tool with review-before-save | P1 | M | T1.2,T2.5 | C | P,U | Tool/runtime/Skill registry tests | Record review-before-save rule if accepted | Model-created skills enter existing custom Skill registry only after user review and name validation |
-| T4.4 | Add memory import from another AI workflow | P1 | M | T1.3 | C | P,U | Parser/schema/memory store tests | Record import format if durable | Imported profile text is converted into typed memories with preview, dedupe, and no automatic prompt mutation |
-| T4.5 | Add saved items, bookmarks, and snippets with prompt insertion | P1 | M | T1.1 | D | S,P | Store/component tests and sync boundary tests | Record saved-item sync rule | Users can save messages/snippets, search them, and insert snippets into the prompt without mutating original chats |
-| T4.6 | Add prompt injection controls: disable memory/system prompt, preset cadence, force response language | P1 | M | T1.3 | E | P,U | Request augmentation tests and prompt-freeze update | Record prompt-control semantics | Controls are explicit, persisted, localized, and reflected in model-facing prompt tests |
+| T5.1 | Add Browser Control sidepanel page | P0 | L | T4.1 | A | S, P, E | Component tests for status and toggles | None | Page shows enable state, platform support, controlled target, action history, detach button |
+| T5.2 | Add background/browser-control message API | P0 | M | T2.2, T5.1 | B | P, U | Message handler tests | None | UI can get/set settings, get state, lock/select target, enable/disable control |
+| T5.3 | Add i18n strings and navigation | P0 | S | T5.1 | C | S, E | i18n verification | None | Capabilities nav exposes Browser Control with zh/en strings |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T4.1 | L | High | sandbox, tool runtime, renderer cards |
-| B | T4.2 | M | Low | `core/voice/*`, settings UI |
-| C | T4.3, T4.4 | M | Medium | `core/skill/*`, `core/memory/*`, tool provider |
-| D | T4.5 | M | Medium | `core/saved-items/*`, sidepanel UI |
-| E | T4.6 | M | Medium | prompt/settings/i18n tests |
+| A | T5.1 | L | Medium | `entrypoints/sidepanel/pages/BrowserControlPage.tsx` |
+| B | T5.2 | M | Medium | `entrypoints/background.ts`, `core/types.ts` |
+| C | T5.3 | S | Low | `entrypoints/sidepanel/App.tsx`, i18n resources |
 
-## Phase 5: P2 Organization, Export, and Product Surfaces
+## Phase 6: Verification, Documentation, and Release Readiness
 
-**Goal**: Add lower-priority Better DeepSeek features once the core agentic and Android work is stable.
-**Prerequisite**: P0 phases complete.
-**S.U.P.E.R Focus**: S, R.
+**Goal**: Prove the full integration and update public/operator docs.
+**Prerequisite**: Phase 5.
+**S.U.P.E.R Focus**: E, R.
 
 | # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
 |:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| T5.1 | Add chat tags, filtering, and history search adapters for DeepSeek sidebar | P2 | L | T1.5 | A | S,E | DOM fixture/e2e tests | Record DOM adapter assumptions | Tags/search are isolated from official export and fail visibly if DeepSeek DOM changes |
-| T5.2 | Extend export to message-level, saved-item, and image outputs | P2 | M | T4.5 | B | P,R | Export schema/artifact tests | None | Existing official export remains compatible; new formats are optional and clearly labeled |
-| T5.3 | Add API playground behind explicit developer/user setting | P2 | M | T1.1 | C | S,P | API key boundary tests and UI tests | Record API key storage rule if needed | Playground uses existing API key boundaries and never leaks keys into sync/export |
-| T5.4 | Add small UX polish: code block downloads, native navigation patch, local what's-new panel | P2 | M | T1.5 | D | S,E | DOM fixture tests | None | UX patches are optional, reversible, and covered by selectors/fixtures |
-| T5.5 | Decide custom CSS/theme preset policy; implement only if compatible with store/product posture | P2 | S | T1.5 | E | P,E | Not applicable if decision doc only; if implemented, add settings tests | Record policy decision | A documented go/no-go decision exists; no remote CSS or unbounded injection is introduced |
+| T6.1 | Add real Chrome smoke fixture and script | P0 | L | T5.2 | A | E, R | Browser smoke script or documented blocker | Record smoke command if stable | Smoke covers snapshot, click/fill, navigate/new/select/close, detach |
+| T6.2 | Update docs and Chrome Web Store permission copy | P0 | M | T1.3, T5.1 | B | E, P | Docs leak check and manifest policy | None | README/store/privacy docs describe user-visible capability without internal protocol leakage |
+| T6.3 | Run full validation and final diff review | P0 | M | T6.1, T6.2 | C | S, U, P, E, R | `npm run ci:quality` plus smoke best effort | Record durable validation gotchas | Full checks pass or blockers are explicit with next-best evidence |
 
 ### Parallel Lanes
 
 | Lane | Tasks | Combined Effort | Merge Risk | Key Files |
 |:--|:--|:--|:--|:--|
-| A | T5.1 | L | High | DeepSeek DOM adapters |
-| B | T5.2 | M | Medium | export modules, saved items |
-| C | T5.3 | M | Low | sidepanel API playground |
-| D | T5.4 | M | Medium | content DOM utilities |
-| E | T5.5 | S | Low | docs/settings |
-
-## Phase 6: Hardening, Documentation, and Release Readiness
-
-**Goal**: Validate the full feature set, update public docs without leaking implementation details, and prepare a release-quality branch.
-**Prerequisite**: Selected feature phases complete.
-**S.U.P.E.R Focus**: P, E, R.
-
-| # | Task | Priority | Effort | Depends On | Lane | S.U.P.E.R | Test Expectation | Memory Impact | Acceptance Criteria |
-|:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| T6.1 | Run and fix full validation matrix across compile, tests, prompt freeze, browser builds, smoke checks, and Android best-available checks | P0 | L | T2.*,T3.*,T4.*,T5.* | A | P,E | Full validation matrix | Record any new release gate | Validation results are documented with exact pass/fail/blocked states |
-| T6.2 | Update README, README_EN, store-facing docs, and Android install/developer docs | P1 | M | T6.1 | B | S,P | Docs leakage checks and markdown/diff checks | Record public positioning if durable | Public docs describe user-visible features only and do not expose internal endpoints/protocol details |
-| T6.3 | Final progress reconciliation and archive preparation | P1 | S | T6.1,T6.2 | C | P | GitHub issue/milestone status check | None | MASTER.md, issues, milestones, and archive notes are consistent before release/merge |
-
-### Parallel Lanes
-
-| Lane | Tasks | Combined Effort | Merge Risk | Key Files |
-|:--|:--|:--|:--|:--|
-| A | T6.1 | L | High | whole repo |
-| B | T6.2 | M | Low | README/docs/store |
-| C | T6.3 | S | Low | progress/archive docs |
+| A | T6.1 | L | Medium | `scripts/*`, `test-pages/*`, tests |
+| B | T6.2 | M | Medium | docs, README |
+| C | T6.3 | M | Low | validation only |
