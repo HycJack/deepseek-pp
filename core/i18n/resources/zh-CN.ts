@@ -742,6 +742,12 @@ export const zhCN = {
       cancelNextConversation: '取消下一条新会话使用 {name}',
       pendingNextConversation: '下一条新会话将使用此项目',
       operationFailed: '项目操作失败：{message}',
+      age: {
+        justNow: '刚刚',
+        minutesAgo: '{count}分钟前',
+        hoursAgo: '{count}小时前',
+        daysAgo: '{count}天前',
+      },
     },
     uxPolish: {
       downloadCode: '下载',

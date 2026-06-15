@@ -359,11 +359,11 @@ function getContentUxPolishLabels() {
 
 function formatContentAge(timestamp: number): string {
   const mins = Math.floor((Date.now() - timestamp) / 60000);
-  if (mins < 1) return contentT('sidepanel.memory.age.justNow');
-  if (mins < 60) return contentT('sidepanel.memory.age.minutesAgo', { count: mins });
+  if (mins < 1) return contentT('content.projectSidebar.age.justNow');
+  if (mins < 60) return contentT('content.projectSidebar.age.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return contentT('sidepanel.memory.age.hoursAgo', { count: hours });
-  return contentT('sidepanel.memory.age.daysAgo', { count: Math.floor(hours / 24) });
+  if (hours < 24) return contentT('content.projectSidebar.age.hoursAgo', { count: hours });
+  return contentT('content.projectSidebar.age.daysAgo', { count: Math.floor(hours / 24) });
 }
 
 export default defineContentScript({

@@ -282,6 +282,75 @@ describe('DeepSeek project sidebar organizer', () => {
     expect(document.querySelector<HTMLElement>('[data-testid="session-one-row"]')?.hidden).toBe(false);
     expect(document.querySelector<HTMLElement>('[data-testid="session-one-row"]')?.style.getPropertyValue('display')).toBe('');
   });
+
+  it('toggles a project as the pending context for the next new conversation', async () => {
+    const state = createProjectState({ conversations: [] });
+    sendMessage.mockImplementation(async (message) => {
+      if (message.type === 'GET_PROJECT_CONTEXT_STATE') return state;
+      return { ok: true };
+    });
+    mountHistoryDom();
+
+    const controller = startDeepSeekProjectSidebarOrganizer(() => labels);
+    await flushProjectSidebar();
+
+    document.querySelector<HTMLButtonElement>('[data-dpp-project-action="toggle-pending"]')?.click();
+    await Promise.resolve();
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'SET_PENDING_PROJECT_CONTEXT',
+      payload: { projectId: 'project-deepseek' },
+    });
+    controller.stop();
+  });
+
+  it('renders the pending banner and reflects pending state on the toggle button', () => {
+    const state = createProjectState({ conversations: [], pendingProjectId: 'project-deepseek' });
+    mountHistoryDom();
+
+    const section = renderProjectSidebar(document, createRenderOptions({
+      state,
+      expandedProjectIds: new Set(['project-deepseek']),
+    }));
+
+    expect(section?.querySelector('.dpp-project-sidebar__pending')?.textContent).toBe('下一条新会话将使用此项目');
+    const toggleButton = section?.querySelector<HTMLButtonElement>('[data-dpp-project-action="toggle-pending"]');
+    expect(toggleButton?.dataset.active).toBe('true');
+    expect(toggleButton?.getAttribute('aria-label')).toBe('取消下一条新会话使用 deepseek-pp');
+  });
+
+  it('shows a toggle to expand conversations beyond the project limit', () => {
+    const conversations = Array.from({ length: 6 }, (_, index) => ({
+      conversationId: `session-${index}`,
+      projectId: 'project-deepseek',
+      title: `任务 ${index}`,
+      url: `https://chat.deepseek.com/a/chat/s/session-${index}`,
+      addedAt: NOW - index * 1000,
+      lastSeenAt: NOW - index * 1000,
+    }));
+    const state = createProjectState({ conversations });
+    mountHistoryDom();
+
+    const collapsed = renderProjectSidebar(document, createRenderOptions({
+      state,
+      expandedProjectIds: new Set(['project-deepseek']),
+    }));
+    expect(collapsed?.querySelectorAll('.dpp-project-sidebar__conversation-row')).toHaveLength(5);
+    expect(collapsed?.querySelector('[data-dpp-project-show-all]')?.textContent).toBe('展开显示');
+
+    const onToggleShowAll = vi.fn();
+    const expanded = renderProjectSidebar(document, createRenderOptions({
+      state,
+      expandedProjectIds: new Set(['project-deepseek']),
+      showAllProjectIds: new Set(['project-deepseek']),
+      onToggleShowAll,
+    }));
+    expect(expanded?.querySelectorAll('.dpp-project-sidebar__conversation-row')).toHaveLength(6);
+    expect(expanded?.querySelector('[data-dpp-project-show-all]')?.textContent).toBe('收起显示');
+
+    expanded?.querySelector<HTMLButtonElement>('[data-dpp-project-show-all]')?.click();
+    expect(onToggleShowAll).toHaveBeenCalledWith('project-deepseek');
+  });
 });
 
 function mountHistoryDom() {

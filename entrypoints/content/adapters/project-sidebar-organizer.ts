@@ -84,6 +84,8 @@ export function startDeepSeekProjectSidebarOrganizer(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let nativeMenuConversation: NativeMenuConversation | null = null;
   let projectConversationMenu: ProjectConversationMenuState | null = null;
+  let rendering = false;
+  let cachedHistoryItems: readonly HistoryItem[] = [];
   const expandedProjectIds = new Set<string>();
   const showAllProjectIds = new Set<string>();
 
@@ -113,97 +115,104 @@ export function startDeepSeekProjectSidebarOrganizer(
   };
 
   const schedule = () => {
-    if (stopped || timer) return;
+    if (stopped || timer || rendering) return;
     timer = setTimeout(() => {
       timer = null;
-      renderProjectSidebar(document, {
-        state,
-        labels: getLabels(),
-        statusMessage,
-        expandedProjectIds,
-        showAllProjectIds,
-        onToggleProject(projectId) {
-          if (expandedProjectIds.has(projectId)) {
-            expandedProjectIds.delete(projectId);
-          } else {
-            expandedProjectIds.add(projectId);
-          }
-          schedule();
-        },
-        onToggleShowAll(projectId) {
-          if (showAllProjectIds.has(projectId)) {
-            showAllProjectIds.delete(projectId);
-          } else {
-            showAllProjectIds.add(projectId);
-          }
-          schedule();
-        },
-        onOpenProjectConversationMenu(menu) {
-          projectConversationMenu = isSameProjectConversationMenu(projectConversationMenu, menu) ? null : menu;
-          schedule();
-        },
-        onRemoveConversationFromProject(conversationId) {
-          void mutateProjectSidebarState(async () => {
-            assertRuntimeSuccess(await chrome.runtime.sendMessage({
-              type: 'REMOVE_CONVERSATION_FROM_PROJECT',
-              payload: { conversationId },
-            }));
-            projectConversationMenu = null;
-          });
-        },
-        onMoveCurrent(projectId) {
-          void mutateProjectSidebarState(async () => {
-            const project = state?.projects.find((item) => item.id === projectId);
-            if (!project) throw new Error(`Project not found: ${projectId}`);
-            const current = getCurrentConversation(getLabels());
-            if (!current) return;
-            const currentMembership = state?.conversations.find((item) => item.conversationId === current.conversationId) ?? null;
-            if (currentMembership?.projectId === projectId) {
+      rendering = true;
+      try {
+        cachedHistoryItems = extractHistoryItems(document, EMPTY_HISTORY_STATE);
+        renderProjectSidebar(document, {
+          historyItems: cachedHistoryItems,
+          state,
+          labels: getLabels(),
+          statusMessage,
+          expandedProjectIds,
+          showAllProjectIds,
+          onToggleProject(projectId) {
+            if (expandedProjectIds.has(projectId)) {
+              expandedProjectIds.delete(projectId);
+            } else {
+              expandedProjectIds.add(projectId);
+            }
+            schedule();
+          },
+          onToggleShowAll(projectId) {
+            if (showAllProjectIds.has(projectId)) {
+              showAllProjectIds.delete(projectId);
+            } else {
+              showAllProjectIds.add(projectId);
+            }
+            schedule();
+          },
+          onOpenProjectConversationMenu(menu) {
+            projectConversationMenu = isSameProjectConversationMenu(projectConversationMenu, menu) ? null : menu;
+            schedule();
+          },
+          onRemoveConversationFromProject(conversationId) {
+            void mutateProjectSidebarState(async () => {
               assertRuntimeSuccess(await chrome.runtime.sendMessage({
                 type: 'REMOVE_CONVERSATION_FROM_PROJECT',
-                payload: { conversationId: current.conversationId },
+                payload: { conversationId },
               }));
-              return;
-            }
-            assertRuntimeSuccess(await chrome.runtime.sendMessage({
-              type: 'ADD_CONVERSATION_TO_PROJECT',
-              payload: { projectId, conversation: current },
-            }));
-          });
-        },
-        onTogglePending(projectId) {
-          void mutateProjectSidebarState(async () => {
-            assertRuntimeSuccess(await chrome.runtime.sendMessage({
-              type: 'SET_PENDING_PROJECT_CONTEXT',
-              payload: { projectId: state?.pendingProjectId === projectId ? null : projectId },
-            }));
-          });
-        },
-        nativeMenuConversation,
-        activeProjectConversationMenu: projectConversationMenu,
-        onNativeJoinProject(projectId) {
-          void mutateProjectSidebarState(async () => {
-            if (!nativeMenuConversation) return;
-            assertRuntimeSuccess(await chrome.runtime.sendMessage({
-              type: 'ADD_CONVERSATION_TO_PROJECT',
-              payload: { projectId, conversation: nativeMenuConversation },
-            }));
-            nativeMenuConversation = null;
-            removeNativeMenuEnhancements(document);
-          });
-        },
-        onNativeRemoveProject() {
-          void mutateProjectSidebarState(async () => {
-            if (!nativeMenuConversation) return;
-            assertRuntimeSuccess(await chrome.runtime.sendMessage({
-              type: 'REMOVE_CONVERSATION_FROM_PROJECT',
-              payload: { conversationId: nativeMenuConversation.conversationId },
-            }));
-            nativeMenuConversation = null;
-            removeNativeMenuEnhancements(document);
-          });
-        },
-      });
+              projectConversationMenu = null;
+            });
+          },
+          onMoveCurrent(projectId) {
+            void mutateProjectSidebarState(async () => {
+              const project = state?.projects.find((item) => item.id === projectId);
+              if (!project) throw new Error(`Project not found: ${projectId}`);
+              const current = getCurrentConversation(getLabels(), cachedHistoryItems);
+              if (!current) return;
+              const currentMembership = state?.conversations.find((item) => item.conversationId === current.conversationId) ?? null;
+              if (currentMembership?.projectId === projectId) {
+                assertRuntimeSuccess(await chrome.runtime.sendMessage({
+                  type: 'REMOVE_CONVERSATION_FROM_PROJECT',
+                  payload: { conversationId: current.conversationId },
+                }));
+                return;
+              }
+              assertRuntimeSuccess(await chrome.runtime.sendMessage({
+                type: 'ADD_CONVERSATION_TO_PROJECT',
+                payload: { projectId, conversation: current },
+              }));
+            });
+          },
+          onTogglePending(projectId) {
+            void mutateProjectSidebarState(async () => {
+              assertRuntimeSuccess(await chrome.runtime.sendMessage({
+                type: 'SET_PENDING_PROJECT_CONTEXT',
+                payload: { projectId: state?.pendingProjectId === projectId ? null : projectId },
+              }));
+            });
+          },
+          nativeMenuConversation,
+          activeProjectConversationMenu: projectConversationMenu,
+          onNativeJoinProject(projectId) {
+            void mutateProjectSidebarState(async () => {
+              if (!nativeMenuConversation) return;
+              assertRuntimeSuccess(await chrome.runtime.sendMessage({
+                type: 'ADD_CONVERSATION_TO_PROJECT',
+                payload: { projectId, conversation: nativeMenuConversation },
+              }));
+              nativeMenuConversation = null;
+              removeNativeMenuEnhancements(document);
+            });
+          },
+          onNativeRemoveProject() {
+            void mutateProjectSidebarState(async () => {
+              if (!nativeMenuConversation) return;
+              assertRuntimeSuccess(await chrome.runtime.sendMessage({
+                type: 'REMOVE_CONVERSATION_FROM_PROJECT',
+                payload: { conversationId: nativeMenuConversation.conversationId },
+              }));
+              nativeMenuConversation = null;
+              removeNativeMenuEnhancements(document);
+            });
+          },
+        });
+      } finally {
+        rendering = false;
+      }
     }, 100);
   };
 
@@ -235,7 +244,7 @@ export function startDeepSeekProjectSidebarOrganizer(
     const target = event.target;
     if (!(target instanceof Node)) return;
     if (target instanceof Element && target.closest(`#${PROJECT_SECTION_ID}`)) return;
-    const conversation = findHistoryConversationForNode(target);
+    const conversation = findHistoryConversationForNode(target, cachedHistoryItems);
     if (conversation) {
       nativeMenuConversation = conversation;
       projectConversationMenu = null;
@@ -243,6 +252,14 @@ export function startDeepSeekProjectSidebarOrganizer(
       return;
     }
     if (target instanceof Element && target.closest(`[${NATIVE_MENU_ENHANCER_ATTR}="true"]`)) return;
+    // While a native conversation menu is open, clicks inside it (its own items,
+    // padding, the injected panel) must not drop the enhancement context — only
+    // clicks elsewhere clear it. Otherwise the injected panel flickers away the
+    // moment the user touches a native menu item.
+    if (nativeMenuConversation && target instanceof Element) {
+      const openMenu = findNativeConversationMenu(document);
+      if (openMenu?.contains(target)) return;
+    }
     nativeMenuConversation = null;
   };
 
@@ -294,9 +311,10 @@ export function renderProjectSidebar(
     activeProjectConversationMenu?: ProjectConversationMenuState | null;
     onNativeJoinProject?(projectId: string): void;
     onNativeRemoveProject?(): void;
+    historyItems?: readonly HistoryItem[];
   },
 ): HTMLElement | null {
-  const historyItems = extractHistoryItems(root, EMPTY_HISTORY_STATE);
+  const historyItems = options.historyItems ?? extractHistoryItems(root, EMPTY_HISTORY_STATE);
   const mount = findProjectSidebarMount(root, historyItems);
   restoreProjectHiddenRows(root);
 
@@ -857,8 +875,7 @@ function isSameProjectConversationMenu(
   return current?.conversationId === next.conversationId && current.projectId === next.projectId;
 }
 
-function findHistoryConversationForNode(node: Node): NativeMenuConversation | null {
-  const items = extractHistoryItems(document, EMPTY_HISTORY_STATE);
+function findHistoryConversationForNode(node: Node, items: readonly HistoryItem[]): NativeMenuConversation | null {
   const item = items.find((candidate) => candidate.element.contains(node));
   if (!item) return null;
   return {

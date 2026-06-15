@@ -742,6 +742,12 @@ export const en = {
       cancelNextConversation: 'Cancel using {name} for the next new conversation',
       pendingNextConversation: 'The next new conversation will use this project',
       operationFailed: 'Project action failed: {message}',
+      age: {
+        justNow: 'Just now',
+        minutesAgo: '{count}m ago',
+        hoursAgo: '{count}h ago',
+        daysAgo: '{count}d ago',
+      },
     },
     uxPolish: {
       downloadCode: 'Download',

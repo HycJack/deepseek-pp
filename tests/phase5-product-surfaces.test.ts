@@ -47,19 +47,23 @@ describe('Phase 5 product surface helpers', () => {
       <nav>
         <div><a href="https://chat.deepseek.com/a/chat/s/session-one">Release notes</a></div>
         <div><a href="https://chat.deepseek.com/a/chat/s/session-two">Android WebView</a></div>
+        <div><a href="https://chat.deepseek.com/a/chat/s/session-three">Refactor adapters</a><span>2m ago</span></div>
       </nav>
     `;
     const state = normalizeHistoryOrganizerState({
       tagsBySessionId: {
         'session-one': ['release'],
         'session-two': ['android'],
+        'session-three': ['refactor'],
       },
     });
     const items = extractHistoryItems(document, state);
 
     expect(parseSessionId('https://chat.deepseek.com/a/chat/s/session-one')).toBe('session-one');
-    expect(items.map((item) => item.sessionId)).toEqual(['session-one', 'session-two']);
-    expect(items.map((item) => item.tags)).toEqual([['release'], ['android']]);
+    expect(items.map((item) => item.sessionId)).toEqual(['session-one', 'session-two', 'session-three']);
+    expect(items.map((item) => item.tags)).toEqual([['release'], ['android'], ['refactor']]);
+    // Title comes from the anchor text, not the surrounding row noise (timestamps, etc.).
+    expect(items.map((item) => item.title)).toEqual(['Release notes', 'Android WebView', 'Refactor adapters']);
   });
 
   it('collects code blocks and infers download filenames', () => {
