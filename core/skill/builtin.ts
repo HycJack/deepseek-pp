@@ -32,7 +32,7 @@ export const BUILTIN_SKILLS: Skill[] = [
 ## 执行边界
 
 - Shell 工具通过 Chrome Native Messaging 与本机 host (${SHELL_MCP_NATIVE_HOST}) 通信。
-- 只有在工具列表中出现 shell_exec / shell_status 时才调用；不要编造执行结果。
+- 只有在工具列表中出现对应 Shell MCP 工具时才调用；不要编造执行结果。
 - 如果 shell 工具已出现在 Available Tools / MCP 工具列表中，直接输出对应 XML 工具标签调用。
 - 不要输出伪 JSON 调用；DeepSeek++ 只执行 <shell_exec>{"command":"..."}</shell_exec> 这种 XML 标签格式。
 - 不要猜测文件路径，先用 shell_status 判断平台和 shell，再用对应 shell 的目录命令确认实际路径。
@@ -271,7 +271,7 @@ const ENGLISH_BUILTIN_SKILL_TEXT: Record<string, BuiltinSkillText> = {
 ## Execution Boundaries
 
 - Shell tools communicate with the local host (${SHELL_MCP_NATIVE_HOST}) through Chrome Native Messaging.
-- Only call shell_exec / shell_status when they appear in the tool list; never invent command results.
+- Only call a Shell MCP tool when it appears in the tool list; never invent command results.
 - If shell tools appear in Available Tools / MCP tools, emit the matching XML tool tag directly.
 - Do not output pseudo JSON calls. DeepSeek++ only executes XML tags such as <shell_exec>{"command":"..."}</shell_exec>.
 - Do not guess file paths. First call shell_status to identify the platform and shell, then use the matching shell command to confirm real paths.

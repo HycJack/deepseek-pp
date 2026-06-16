@@ -10,8 +10,8 @@ import type {
 } from '../types';
 import {
   getAllSkillSources,
+  getGitHubSkillSourceById,
   getSkillLibrary,
-  getSkillSourceById,
   saveGitHubSkillSource,
   upsertGitHubSkillSource,
 } from './registry';
@@ -162,7 +162,7 @@ export async function importGitHubSkillSource(
 }
 
 export async function checkGitHubSkillSourceUpdates(sourceId: string): Promise<GitHubSkillUpdatePreview> {
-  const source = await getSkillSourceById(sourceId);
+  const source = await getGitHubSkillSourceById(sourceId);
   if (!source) throw new Error('找不到 GitHub Skill 源');
 
   const loaded = await loadGitHubSkillSource(source.url);
@@ -195,7 +195,7 @@ export async function checkGitHubSkillSourceUpdates(sourceId: string): Promise<G
 }
 
 export async function updateGitHubSkillSource(sourceId: string): Promise<GitHubSkillImportResult> {
-  const source = await getSkillSourceById(sourceId);
+  const source = await getGitHubSkillSourceById(sourceId);
   if (!source) throw new Error('找不到 GitHub Skill 源');
 
   const loaded = await loadGitHubSkillSource(source.url);

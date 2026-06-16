@@ -7,11 +7,12 @@ import { getAllSkills, replaceAllCustomSkills } from '../core/skill/registry';
 import {
   parseValidatedArray,
   validateGitHubSkillSource,
+  validateSkillImportSource,
   validatePreset,
   validateSkill,
   validateStoredMemory,
 } from '../core/sync/schema';
-import type { GitHubSkillSource, Memory, Skill, SystemPromptPreset } from '../core/types';
+import type { GitHubSkillSource, LocalSkillSource, Memory, Skill, SystemPromptPreset } from '../core/types';
 
 let storage: Record<string, unknown>;
 
@@ -189,11 +190,25 @@ describe('persisted user data i18n boundaries', () => {
       updatedAt: 2,
       description: '上游描述',
     };
+    const localSource: LocalSkillSource = {
+      id: 'local:/Users/me/.codex/skills/demo',
+      provider: 'local',
+      rootPath: '/Users/me/.codex/skills/demo',
+      displayName: 'demo',
+      directoryName: 'demo',
+      skillPaths: ['SKILL.md'],
+      importedSkillNames: ['demo'],
+      importedAt: 1,
+      updatedAt: 2,
+      warnings: ['保留本地路径'],
+    };
 
     expect(parseValidatedArray('memories.json', JSON.stringify([memory]), validateStoredMemory)[0]).toEqual(memory);
     expect(parseValidatedArray('skills.json', JSON.stringify([skill]), validateSkill)[0]).toEqual(skill);
     expect(parseValidatedArray('presets.json', JSON.stringify([preset]), validatePreset)[0]).toEqual(preset);
     expect(parseValidatedArray('skill-sources.json', JSON.stringify([source]), validateGitHubSkillSource)[0])
       .toEqual(source);
+    expect(parseValidatedArray('skill-sources.json', JSON.stringify([localSource]), validateSkillImportSource)[0])
+      .toEqual(localSource);
   });
 });

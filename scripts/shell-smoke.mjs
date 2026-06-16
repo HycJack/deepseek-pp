@@ -122,12 +122,19 @@ await testMethod('initialize', 'initialize', {
 await testMethod('tools/list', 'tools/list', undefined, (res) => {
   assert(res.result, 'expected result');
   assert(Array.isArray(res.result.tools), 'expected tools array');
-  assert(res.result.tools.length === 4, `expected 4 tools, got ${res.result.tools.length}`);
   const names = res.result.tools.map(t => t.name);
-  assert(names.includes('shell_exec'), 'expected shell_exec');
-  assert(names.includes('shell_status'), 'expected shell_status');
-  assert(names.includes('python_status'), 'expected python_status');
-  assert(names.includes('python_exec'), 'expected python_exec');
+  const requiredTools = [
+    'shell_exec',
+    'shell_status',
+    'python_status',
+    'python_exec',
+    'local_skill_preview',
+    'local_folder_pick',
+  ];
+  assert(res.result.tools.length >= requiredTools.length, `expected at least ${requiredTools.length} tools, got ${res.result.tools.length}`);
+  for (const tool of requiredTools) {
+    assert(names.includes(tool), `expected ${tool}`);
+  }
 });
 
 await testMethod('tools/call shell_status', 'tools/call', {

@@ -1,9 +1,11 @@
 import type {
   GitHubSkillSource,
+  LocalSkillSource,
   Memory,
   MemoryType,
   NewMemory,
   Skill,
+  SkillImportSource,
   SkillSource,
   SystemPromptPreset,
 } from '../types';
@@ -125,6 +127,31 @@ export function validateGitHubSkillSource(value: unknown, path = 'skillSource'):
     ...(object.licenseSpdxId === undefined ? {} : { licenseSpdxId: requiredString(object.licenseSpdxId, `${path}.licenseSpdxId`) }),
     ...(object.packageVersion === undefined ? {} : { packageVersion: requiredString(object.packageVersion, `${path}.packageVersion`) }),
     ...(object.description === undefined ? {} : { description: requiredString(object.description, `${path}.description`) }),
+  };
+}
+
+export function validateSkillImportSource(value: unknown, path = 'skillSource'): SkillImportSource {
+  const object = objectValue(value, path);
+  if (object.provider === 'github') return validateGitHubSkillSource(value, path);
+  if (object.provider === 'local') return validateLocalSkillSource(value, path);
+  throw new Error(`${path}.provider must be github or local`);
+}
+
+export function validateLocalSkillSource(value: unknown, path = 'skillSource'): LocalSkillSource {
+  const object = objectValue(value, path);
+  if (object.provider !== 'local') throw new Error(`${path}.provider must be local`);
+  return {
+    id: requiredString(object.id, `${path}.id`),
+    provider: 'local',
+    rootPath: requiredString(object.rootPath, `${path}.rootPath`),
+    displayName: requiredString(object.displayName, `${path}.displayName`),
+    directoryName: requiredString(object.directoryName, `${path}.directoryName`),
+    skillPaths: stringArray(object.skillPaths, `${path}.skillPaths`),
+    importedSkillNames: stringArray(object.importedSkillNames, `${path}.importedSkillNames`),
+    importedAt: requiredFiniteNumber(object.importedAt, `${path}.importedAt`),
+    updatedAt: requiredFiniteNumber(object.updatedAt, `${path}.updatedAt`),
+    warnings: stringArray(object.warnings, `${path}.warnings`),
+    ...(object.lastCheckedAt === undefined ? {} : { lastCheckedAt: requiredFiniteNumber(object.lastCheckedAt, `${path}.lastCheckedAt`) }),
   };
 }
 

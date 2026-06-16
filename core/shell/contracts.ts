@@ -5,7 +5,7 @@ export const SHELL_MCP_NATIVE_HOST = 'com.deepseek_pp.shell';
 
 export const OFFICECLI_BIN_PATH = 'officecli';
 
-export const SHELL_TOOL_NAMES = ['shell_exec', 'shell_status', 'python_status', 'python_exec'] as const;
+export const SHELL_TOOL_NAMES = ['shell_exec', 'shell_status', 'python_status', 'python_exec', 'local_skill_preview', 'local_folder_pick'] as const;
 export type ShellToolName = typeof SHELL_TOOL_NAMES[number];
 
 export interface ShellToolSpec {
@@ -39,5 +39,17 @@ export const SHELL_TOOL_SPECS: readonly ShellToolSpec[] = [
     title: '执行 Python',
     description: '执行短 Python 代码，用于快速验证想法、复杂计算和小型数据处理。',
     risk: 'high',
+  },
+  {
+    name: 'local_skill_preview',
+    title: '预览本地 Skill',
+    description: '只读扫描本地 Skill 目录，返回 SKILL.md、文本资源和脚本清单；不会执行本地代码。',
+    risk: 'medium',
+  },
+  {
+    name: 'local_folder_pick',
+    title: '选择本地文件夹',
+    description: '打开系统文件夹选择器并返回用户选择的本地绝对路径。',
+    risk: 'low',
   },
 ] as const;

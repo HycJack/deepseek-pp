@@ -29,6 +29,11 @@ import {
   updateGitHubSkillSource,
 } from '../core/skill/github-importer';
 import {
+  importLocalSkillSource,
+  pickLocalSkillFolder,
+  previewLocalSkillSource,
+} from '../core/skill/local-importer';
+import {
   getAllPresets,
   savePreset,
   deletePreset,
@@ -42,15 +47,16 @@ import { getBackgroundConfig, saveBackgroundConfig, clearBackgroundConfig } from
 import { getPetConfig, savePetConfig, clearPetConfig } from '../core/pet/store';
 import { getExtensionVersion } from '../core/version';
 import { getSyncConfig, saveSyncConfig } from '../core/sync/config';
+import { mergeLocalSkillImportsIntoSyncSnapshot } from '../core/sync/local-skill-merge';
 import { webdavTest, webdavMkcol, webdavGet, webdavPut } from '../core/sync/webdav-client';
 import {
   parseValidatedArray,
   parseValidatedJson,
-  validateGitHubSkillSource,
   validateImportedMemory,
   validatePreset,
   validateProjectContextState,
   validateSavedItemsState,
+  validateSkillImportSource,
   validateSkill,
   validateStoredMemory,
 } from '../core/sync/schema';
@@ -191,7 +197,7 @@ import {
   watchLocalePreference,
 } from '../core/i18n/store';
 import type { WebSearchToolName } from '../core/tool/web-search';
-import type { BackgroundConfig, CurrentDeepSeekConversation, DeepSeekTheme, GitHubSkillImportRequest, GitHubSkillSource, Memory, ModelType, NewMemory, PetConfig, ProjectContextState, SavedItemInput, Skill, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolDescriptor, ToolExecutionRecord, ToolExecutionTrigger, ToolResult } from '../core/types';
+import type { BackgroundConfig, CurrentDeepSeekConversation, DeepSeekTheme, GitHubSkillImportRequest, GitHubSkillSource, LocalSkillImportRequest, Memory, ModelType, NewMemory, PetConfig, ProjectContextState, SavedItemInput, Skill, SkillImportSource, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolDescriptor, ToolExecutionRecord, ToolExecutionTrigger, ToolResult } from '../core/types';
 import type { McpServerCreateInput, McpServerUpdateInput } from '../core/mcp/types';
 import type { AutomationCreateInput, AutomationRunnerRequest, AutomationRunnerResult, AutomationStatus, AutomationUpdateInput } from '../core/automation/types';
 import type { ConversationExportProgress, ConversationExportResult } from '../core/export/types';
@@ -233,7 +239,7 @@ type ActionApi = {
 type SyncDataSnapshot = {
   memories: Omit<Memory, 'id'>[];
   skills: Skill[];
-  skillSources: GitHubSkillSource[];
+  skillSources: SkillImportSource[];
   presets: SystemPromptPreset[];
   projectContext: ProjectContextState | null;
   savedItems: Awaited<ReturnType<typeof getSavedItemsState>> | null;
@@ -519,8 +525,11 @@ async function handleMessage(
     case 'GET_SKILL_LIBRARY':
       return getSkillLibrary(currentBackgroundLocale);
 
-    case 'GET_GITHUB_SKILL_SOURCES':
+    case 'GET_SKILL_SOURCES':
       return getAllSkillSources();
+
+    case 'GET_GITHUB_SKILL_SOURCES':
+      return (await getAllSkillSources()).filter((source) => source.provider === 'github');
 
     case 'SAVE_SKILL': {
       const payload = message.payload as Skill | { skill: Skill; previousName?: string };
@@ -551,6 +560,22 @@ async function handleMessage(
 
     case 'IMPORT_GITHUB_SKILL_SOURCE': {
       const result = await importGitHubSkillSource(message.payload as GitHubSkillImportRequest);
+      await broadcastStateUpdate(sender.tab?.id);
+      return result;
+    }
+
+    case 'PREVIEW_LOCAL_SKILL_SOURCE': {
+      const { rootPath } = message.payload as { rootPath: string };
+      return previewLocalSkillSource(rootPath);
+    }
+
+    case 'PICK_LOCAL_SKILL_FOLDER': {
+      const { defaultPath } = (message.payload ?? {}) as { defaultPath?: string };
+      return { path: await pickLocalSkillFolder(defaultPath) };
+    }
+
+    case 'IMPORT_LOCAL_SKILL_SOURCE': {
+      const result = await importLocalSkillSource(message.payload as LocalSkillImportRequest);
       await broadcastStateUpdate(sender.tab?.id);
       return result;
     }
@@ -1019,7 +1044,7 @@ async function handleMessage(
       const config = await getSyncConfig();
       if (!config) throw new Error(backgroundT('background.sync.missingWebDav'));
 
-      const snapshot = await getRemoteSyncDataSnapshot(config);
+      const snapshot = await mergeSyncSnapshotWithLocalImports(await getRemoteSyncDataSnapshot(config));
 
       const replacements: Promise<unknown>[] = [
         replaceAllMemories(snapshot.memories),
@@ -1657,8 +1682,8 @@ async function getLocalSyncDataSnapshot(): Promise<SyncDataSnapshot> {
 
   return {
     memories: memories.map(({ id, ...memory }) => memory),
-    skills: userSkills,
-    skillSources,
+    skills: userSkills.filter(isSyncableSkill),
+    skillSources: skillSources.filter(isSyncableSkillSource),
     presets,
     projectContext,
     savedItems,
@@ -1696,12 +1721,17 @@ async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSn
     return validateStoredMemory(memory, path);
   });
 
+  const skills = parseValidatedArray('skills.json', remoteSkillJson, validateSkill)
+    .filter(isSyncableSkill);
+  const skillSources = remoteSkillSourceJson === null
+    ? []
+    : parseValidatedArray('skill-sources.json', remoteSkillSourceJson, validateSkillImportSource)
+      .filter(isSyncableSkillSource);
+
   return {
     memories,
-    skills: parseValidatedArray('skills.json', remoteSkillJson, validateSkill),
-    skillSources: remoteSkillSourceJson === null
-      ? []
-      : parseValidatedArray('skill-sources.json', remoteSkillSourceJson, validateGitHubSkillSource),
+    skills,
+    skillSources,
     presets: parseValidatedArray('presets.json', remotePresetJson, validatePreset),
     projectContext: remoteProjectContextJson === null
       ? null
@@ -1709,6 +1739,36 @@ async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSn
     savedItems: remoteSavedItemsJson === null
       ? null
       : parseValidatedJson('saved-items.json', remoteSavedItemsJson, validateSavedItemsState),
+  };
+}
+
+function isSyncableSkill(skill: Skill): boolean {
+  return !(skill.source === 'remote' && skill.remote?.provider === 'local');
+}
+
+function isSyncableSkillSource(source: SkillImportSource): boolean {
+  return source.provider !== 'local';
+}
+
+async function mergeSyncSnapshotWithLocalImports(snapshot: SyncDataSnapshot): Promise<SyncDataSnapshot> {
+  const [userSkills, skillSources] = await Promise.all([
+    getUserSkills(),
+    getAllSkillSources(),
+  ]);
+  const merged = mergeLocalSkillImportsIntoSyncSnapshot(
+    {
+      skills: snapshot.skills,
+      skillSources: snapshot.skillSources,
+    },
+    {
+      skills: userSkills,
+      skillSources,
+    },
+  );
+  return {
+    ...snapshot,
+    skills: merged.skills,
+    skillSources: merged.skillSources,
   };
 }
 

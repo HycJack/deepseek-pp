@@ -211,29 +211,35 @@ export interface SyncCounts {
 
 export type SkillSource = 'builtin' | 'third-party' | 'official' | 'custom' | 'remote';
 
+export type ImportedSkillProvider = 'github' | 'local';
+
 export interface RemoteSkillFile {
   path: string;
   bytes: number;
 }
 
 export interface RemoteSkillMetadata {
-  provider: 'github';
+  provider: ImportedSkillProvider;
   sourceId: string;
-  sourceUrl: string;
-  repository: string;
-  ref: string;
-  commitSha: string;
+  sourceUrl?: string;
+  repository?: string;
+  ref?: string;
+  commitSha?: string;
   path: string;
   originalName: string;
   importedAt: number;
   updatedAt: number;
   lastCheckedAt?: number;
+  localRootPath?: string;
+  localDirectory?: string;
+  localDisplayName?: string;
   licenseName?: string;
   licenseSpdxId?: string;
   upstreamVersion?: string;
   upstreamUpdatedAt?: string;
   includedFiles: RemoteSkillFile[];
   omittedFiles: RemoteSkillFile[];
+  scriptFiles?: RemoteSkillFile[];
   warnings: string[];
 }
 
@@ -273,6 +279,22 @@ export interface GitHubSkillSource {
   lastCheckedAt?: number;
 }
 
+export interface LocalSkillSource {
+  id: string;
+  provider: 'local';
+  rootPath: string;
+  displayName: string;
+  directoryName: string;
+  skillPaths: string[];
+  importedSkillNames: string[];
+  importedAt: number;
+  updatedAt: number;
+  lastCheckedAt?: number;
+  warnings: string[];
+}
+
+export type SkillImportSource = GitHubSkillSource | LocalSkillSource;
+
 export interface GitHubSkillPreviewItem {
   path: string;
   name: string;
@@ -305,6 +327,45 @@ export interface GitHubSkillImportRequest {
 export interface GitHubSkillImportResult {
   ok: true;
   source: GitHubSkillSource;
+  imported: Skill[];
+  replaced: number;
+  renamed: number;
+  warnings: string[];
+}
+
+export interface LocalSkillPreviewItem {
+  path: string;
+  name: string;
+  importName: string;
+  description: string;
+  version?: string;
+  lastUpdated?: string;
+  bytes: number;
+  bodyBytes: number;
+  includedFiles: RemoteSkillFile[];
+  omittedFiles: RemoteSkillFile[];
+  scriptFiles: RemoteSkillFile[];
+  warnings: string[];
+  nameChanged: boolean;
+  existingSkillName?: string;
+  existingSourceId?: string;
+}
+
+export interface LocalSkillPreview {
+  source: LocalSkillSource;
+  skills: LocalSkillPreviewItem[];
+  warnings: string[];
+  truncated: boolean;
+}
+
+export interface LocalSkillImportRequest {
+  rootPath: string;
+  selectedPaths: string[];
+}
+
+export interface LocalSkillImportResult {
+  ok: true;
+  source: LocalSkillSource;
   imported: Skill[];
   replaced: number;
   renamed: number;
@@ -384,9 +445,13 @@ export type MessageAction =
   | { type: 'GET_MEMORY_BY_ID'; payload: { id: number } }
   | { type: 'GET_SKILLS' }
   | { type: 'GET_SKILL_LIBRARY' }
+  | { type: 'GET_SKILL_SOURCES' }
   | { type: 'GET_GITHUB_SKILL_SOURCES' }
   | { type: 'PREVIEW_GITHUB_SKILL_SOURCE'; payload: { url: string } }
   | { type: 'IMPORT_GITHUB_SKILL_SOURCE'; payload: GitHubSkillImportRequest }
+  | { type: 'PREVIEW_LOCAL_SKILL_SOURCE'; payload: { rootPath: string } }
+  | { type: 'PICK_LOCAL_SKILL_FOLDER'; payload?: { defaultPath?: string } }
+  | { type: 'IMPORT_LOCAL_SKILL_SOURCE'; payload: LocalSkillImportRequest }
   | { type: 'CHECK_GITHUB_SKILL_SOURCE_UPDATES'; payload: { sourceId: string } }
   | { type: 'UPDATE_GITHUB_SKILL_SOURCE'; payload: { sourceId: string } }
   | { type: 'DELETE_GITHUB_SKILL_SOURCE'; payload: { sourceId: string } }

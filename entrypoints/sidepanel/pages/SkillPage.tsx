@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { LocaleMessageKey, MessageParams, SupportedLocale } from '../../../core/i18n';
-import type { GitHubSkillSource, GitHubSkillUpdatePreview, Skill } from '../../../core/types';
+import type { GitHubSkillSource, GitHubSkillUpdatePreview, Skill, SkillImportSource } from '../../../core/types';
 import GitHubSkillImportPanel from '../components/GitHubSkillImportPanel';
+import LocalSkillImportPanel from '../components/LocalSkillImportPanel';
 import PageIntro from '../components/PageIntro';
 import SkillCard from '../components/SkillCard';
 import SkillForm from '../components/SkillForm';
@@ -28,6 +29,7 @@ interface ThirdPartySkillGroup {
   id: string;
   title: string;
   subtitle: string;
+  badgeKey: LocaleMessageKey;
   skills: Skill[];
 }
 
@@ -54,17 +56,17 @@ function SkillSection({ title, skills, onEdit, onDelete, onToggleEnabled }: Skil
 export default function SkillPage() {
   const { t, locale } = useI18n();
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [skillSources, setSkillSources] = useState<GitHubSkillSource[]>([]);
+  const [skillSources, setSkillSources] = useState<SkillImportSource[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [showImport, setShowImport] = useState(false);
+  const [importMode, setImportMode] = useState<'github' | 'local' | null>(null);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [sourceActions, setSourceActions] = useState<Record<string, SourceActionState>>({});
   const [expandedThirdPartyGroups, setExpandedThirdPartyGroups] = useState<Record<string, boolean>>({});
 
   const load = async () => {
-    const [list, sources]: [Skill[], GitHubSkillSource[]] = await Promise.all([
+    const [list, sources]: [Skill[], SkillImportSource[]] = await Promise.all([
       chrome.runtime.sendMessage({ type: 'GET_SKILL_LIBRARY' }),
-      chrome.runtime.sendMessage({ type: 'GET_GITHUB_SKILL_SOURCES' }),
+      chrome.runtime.sendMessage({ type: 'GET_SKILL_SOURCES' }),
     ]);
     setSkills(list ?? []);
     setSkillSources(sources ?? []);
@@ -78,18 +80,18 @@ export default function SkillPage() {
   };
 
   const handleCreate = () => {
-    setShowImport(false);
+    setImportMode(null);
     setEditingSkill(null);
     setShowForm((current) => (editingSkill ? true : !current));
   };
 
-  const handleImport = () => {
+  const handleImport = (mode: 'github' | 'local') => {
     closeForm();
-    setShowImport((current) => !current);
+    setImportMode((current) => (current === mode ? null : mode));
   };
 
   const handleEdit = (skill: Skill) => {
-    setShowImport(false);
+    setImportMode(null);
     setEditingSkill(skill);
     setShowForm(true);
   };
@@ -219,6 +221,7 @@ export default function SkillPage() {
   };
 
   const builtin = skills.filter((s) => s.source === 'builtin');
+  const githubSources = skillSources.filter((source): source is GitHubSkillSource => source.provider === 'github');
   const thirdPartyGroups = createThirdPartySkillGroups(
     skills.filter((s) => isThirdPartySkillSource(s.source)),
     skillSources,
@@ -236,13 +239,23 @@ export default function SkillPage() {
         actions={(
           <>
             <button
-              onClick={handleImport}
+              onClick={() => handleImport('github')}
               className="ds-btn-secondary px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14" />
               </svg>
               GitHub
+            </button>
+            <button
+              onClick={() => handleImport('local')}
+              className="ds-btn-secondary px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5h6l2 2h10v8.5a2 2 0 01-2 2H5a2 2 0 01-2-2V7.5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v5m0 0l-2-2m2 2l2-2" />
+              </svg>
+              {t('sidepanel.skillPage.importLocal')}
             </button>
             <button
               onClick={handleCreate}
@@ -257,9 +270,15 @@ export default function SkillPage() {
         )}
       />
 
-      {showImport && (
+      {importMode === 'github' && (
         <div className="animate-slide-down">
-          <GitHubSkillImportPanel onImported={load} onCancel={() => setShowImport(false)} />
+          <GitHubSkillImportPanel onImported={load} onCancel={() => setImportMode(null)} />
+        </div>
+      )}
+
+      {importMode === 'local' && (
+        <div className="animate-slide-down">
+          <LocalSkillImportPanel onImported={load} onCancel={() => setImportMode(null)} />
         </div>
       )}
 
@@ -269,9 +288,9 @@ export default function SkillPage() {
         </div>
       )}
 
-      {skillSources.length > 0 && (
+      {githubSources.length > 0 && (
         <GitHubSourceSection
-          sources={skillSources}
+          sources={githubSources}
           actions={sourceActions}
           onCheck={handleCheckSource}
           onUpdate={handleUpdateSource}
@@ -364,7 +383,7 @@ function ThirdPartySkillSection({ groups, expandedGroups, onToggleGroup, onToggl
                       {group.title}
                     </span>
                     <span className="ds-badge-warning inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium">
-                      {t('sidepanel.skill.sources.thirdParty')}
+                      {t(group.badgeKey)}
                     </span>
                   </span>
                   <span className="block text-[11px] mt-0.5 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
@@ -507,7 +526,7 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
 
 function createThirdPartySkillGroups(
   skills: Skill[],
-  sources: GitHubSkillSource[],
+  sources: SkillImportSource[],
   t: (key: LocaleMessageKey, params?: MessageParams) => string,
 ): ThirdPartySkillGroup[] {
   const sourceById = new Map(sources.map((source) => [source.id, source]));
@@ -531,21 +550,35 @@ function createThirdPartySkillGroups(
 
 function getThirdPartyGroupDescriptor(
   skill: Skill,
-  sourceById: Map<string, GitHubSkillSource>,
+  sourceById: Map<string, SkillImportSource>,
   t: (key: LocaleMessageKey, params?: MessageParams) => string,
 ): Omit<ThirdPartySkillGroup, 'skills'> {
   if (skill.source === 'remote') {
     const source = skill.remote?.sourceId ? sourceById.get(skill.remote.sourceId) : undefined;
-    const title = source?.repository ?? skill.remote?.repository ?? 'GitHub';
-    const rootPath = source?.rootPath ?? '';
-    const ref = source?.ref ?? skill.remote?.ref;
+    if (skill.remote?.provider === 'local') {
+      const localSource = source?.provider === 'local' ? source : undefined;
+      const title = localSource?.displayName ?? skill.remote.localDisplayName ?? t('sidepanel.skill.sources.local');
+      const localPath = localSource?.rootPath ?? skill.remote.localRootPath ?? skill.remote.localDirectory;
+      return {
+        id: `local:${localSource?.id ?? skill.remote.sourceId ?? title}`,
+        title,
+        subtitle: localPath ?? t('sidepanel.skillPage.localReferencedSource'),
+        badgeKey: 'sidepanel.skill.sources.local',
+      };
+    }
+
+    const githubSource = source?.provider === 'github' ? source : undefined;
+    const title = githubSource?.repository ?? skill.remote?.repository ?? 'GitHub';
+    const rootPath = githubSource?.rootPath ?? '';
+    const ref = githubSource?.ref ?? skill.remote?.ref;
     return {
-      id: `github:${source?.id ?? skill.remote?.sourceId ?? title}`,
+      id: `github:${githubSource?.id ?? skill.remote?.sourceId ?? title}`,
       title,
       subtitle: [
         rootPath || t('sidepanel.skillPage.repoRoot'),
         ref,
       ].filter(Boolean).join(' · '),
+      badgeKey: 'sidepanel.skill.sources.remote',
     };
   }
 
@@ -554,6 +587,7 @@ function getThirdPartyGroupDescriptor(
     id: `bundled:${provider}`,
     title: provider,
     subtitle: t('sidepanel.skillPage.bundledThirdPartySource'),
+    badgeKey: 'sidepanel.skill.sources.thirdParty',
   };
 }
 

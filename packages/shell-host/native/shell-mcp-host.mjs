@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   arch,
@@ -12,7 +12,7 @@ import {
   type as osType,
   version as osVersion,
 } from 'node:os';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 
 // Resolve package root from this script's location (native/ -> package root).
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -63,6 +63,14 @@ const MAX_PYTHON_CODE_BYTES = 60_000;
 const MAX_PYTHON_OUTPUT_BYTES = 64_000;
 const PYTHON_PACKAGE_CHECKS = ['numpy', 'pandas', 'sympy'];
 const PYTHON_NOT_FOUND_MESSAGE = 'No local Python interpreter found. Tried environment variables, PATH entries, common paths, and python/python3/py --version.';
+const MAX_LOCAL_SKILLS = 80;
+const MAX_LOCAL_SKILL_BYTES = 120_000;
+const MAX_LOCAL_RESOURCE_FILES_PER_SKILL = 16;
+const MAX_LOCAL_RESOURCE_BYTES_PER_SKILL = 100_000;
+const MAX_LOCAL_RESOURCE_FILE_BYTES = 40_000;
+const MAX_LOCAL_TOTAL_CONTENT_BYTES = 420_000;
+const LOCAL_TEXT_RESOURCE_EXTENSIONS = new Set(['.md', '.txt', '.yaml', '.yml', '.json', '.tex']);
+const LOCAL_SCRIPT_EXTENSIONS = new Set(['.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.sh', '.bash', '.zsh', '.ps1', '.rb', '.pl', '.php', '.lua', '.r']);
 const DEFAULT_SHELL = platform() === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/sh';
 const WINDOWS_POWERSHELL_UTF8_PREAMBLE = [
   '[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)',
@@ -117,6 +125,39 @@ const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
     annotations: { operation: 'execute', risk: 'high' },
+  },
+  {
+    name: 'local_skill_preview',
+    title: 'Preview Local Skill Folder',
+    description: 'Read SKILL.md files, nearby text resources, and script file manifests from a local Skill folder. Does not execute local code.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        rootPath: { type: 'string', description: 'Absolute local folder path that contains one or more SKILL.md files.' },
+        selectedPaths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional SKILL.md paths relative to rootPath. When omitted, previews all detected Skills up to the limit.',
+        },
+      },
+      required: ['rootPath'],
+      additionalProperties: false,
+    },
+    annotations: { operation: 'read', risk: 'medium' },
+  },
+  {
+    name: 'local_folder_pick',
+    title: 'Pick Local Folder',
+    description: 'Open the operating system folder picker and return the absolute path selected by the user.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Optional prompt shown in the native folder picker.' },
+        defaultPath: { type: 'string', description: 'Optional local folder path to use as the initial picker location.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { operation: 'read', risk: 'low' },
   },
 ];
 
@@ -288,7 +329,416 @@ async function handleCallTool(id, params) {
     return jsonRpcResult(id, await executePythonTool(args));
   }
 
+  if (name === 'local_skill_preview') {
+    return jsonRpcResult(id, createLocalSkillPreviewResult(args));
+  }
+
+  if (name === 'local_folder_pick') {
+    return jsonRpcResult(id, createLocalFolderPickResult(args));
+  }
+
   return jsonRpcError(id, -32602, `Unknown tool: ${name}`);
+}
+
+// --- Local folder picker ---
+
+function createLocalFolderPickResult(args) {
+  const title = typeof args?.title === 'string' && args.title.trim()
+    ? args.title.trim()
+    : 'Choose a local Skill folder';
+  const defaultPath = typeof args?.defaultPath === 'string' && args.defaultPath.trim()
+    ? resolveFolderPickerDefault(args.defaultPath)
+    : '';
+
+  try {
+    const selectedPath = pickLocalFolder({ title, defaultPath });
+    const normalizedPath = resolveLocalPath(selectedPath);
+    const selectedStat = safeStat(normalizedPath);
+    if (!selectedStat || !selectedStat.isDirectory()) {
+      throw new Error(`Selected path is not a readable directory: ${normalizedPath}`);
+    }
+
+    return {
+      content: [{ type: 'text', text: `Selected local folder: ${normalizedPath}` }],
+      structuredContent: {
+        ok: true,
+        data: { path: normalizedPath },
+      },
+    };
+  } catch (err) {
+    return {
+      isError: true,
+      content: [{ type: 'text', text: normalizeFolderPickerError(err) }],
+    };
+  }
+}
+
+function pickLocalFolder({ title, defaultPath }) {
+  const hostPlatform = platform();
+  if (hostPlatform === 'darwin') return pickLocalFolderOnMac(title, defaultPath);
+  if (hostPlatform === 'win32') return pickLocalFolderOnWindows(title, defaultPath);
+  return pickLocalFolderOnLinux(title, defaultPath);
+}
+
+function pickLocalFolderOnMac(title, defaultPath) {
+  const script = [
+    'on run argv',
+    '  set promptText to item 1 of argv',
+    '  set defaultPath to item 2 of argv',
+    '  if defaultPath is not "" then',
+    '    set chosenFolder to choose folder with prompt promptText default location (POSIX file defaultPath)',
+    '  else',
+    '    set chosenFolder to choose folder with prompt promptText',
+    '  end if',
+    '  return POSIX path of chosenFolder',
+    'end run',
+  ].join('\n');
+  return execFileSync('osascript', ['-e', script, title, defaultPath || ''], {
+    encoding: 'utf8',
+    timeout: DEFAULT_TIMEOUT_MS,
+    windowsHide: true,
+  }).trim();
+}
+
+function pickLocalFolderOnWindows(title, defaultPath) {
+  const script = [
+    'Add-Type -AssemblyName System.Windows.Forms',
+    '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+    '$dialog.Description = $args[0]',
+    '$dialog.ShowNewFolderButton = $false',
+    'if ($args.Count -gt 1 -and $args[1]) { $dialog.SelectedPath = $args[1] }',
+    'if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {',
+    '  [Console]::Out.Write($dialog.SelectedPath)',
+    '} else {',
+    '  [Environment]::Exit(2)',
+    '}',
+  ].join('; ');
+  return execFileSync('powershell.exe', ['-NoProfile', '-STA', '-Command', script, title, defaultPath || ''], {
+    encoding: 'utf8',
+    timeout: DEFAULT_TIMEOUT_MS,
+    windowsHide: false,
+  }).trim();
+}
+
+function pickLocalFolderOnLinux(title, defaultPath) {
+  const linuxPickers = [
+    {
+      command: 'zenity',
+      args: ['--file-selection', '--directory', '--title', title, ...(defaultPath ? ['--filename', ensureTrailingPathSeparator(defaultPath)] : [])],
+    },
+    {
+      command: 'kdialog',
+      args: ['--getexistingdirectory', defaultPath || homedir(), '--title', title],
+    },
+  ];
+  const missing = [];
+  for (const picker of linuxPickers) {
+    try {
+      return execFileSync(picker.command, picker.args, {
+        encoding: 'utf8',
+        timeout: DEFAULT_TIMEOUT_MS,
+        windowsHide: true,
+      }).trim();
+    } catch (err) {
+      if (err?.code === 'ENOENT') {
+        missing.push(picker.command);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`No graphical folder picker is available. Install one of: ${missing.join(', ')}.`);
+}
+
+function resolveFolderPickerDefault(input) {
+  const resolved = resolveLocalPath(input);
+  const stat = safeStat(resolved);
+  if (stat?.isDirectory()) return resolved;
+  return homedir();
+}
+
+function ensureTrailingPathSeparator(value) {
+  return value.endsWith('/') ? value : `${value}/`;
+}
+
+function normalizeFolderPickerError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/User canceled|cancelled|canceled|exit code 2|The operation couldn.?t be completed/i.test(message)) {
+    return 'Folder selection was cancelled.';
+  }
+  return message;
+}
+
+// --- Local Skill preview ---
+
+function createLocalSkillPreviewResult(args) {
+  const rootInput = args?.rootPath;
+  if (typeof rootInput !== 'string' || rootInput.trim().length === 0) {
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'rootPath is required and must be a non-empty string.' }],
+    };
+  }
+
+  try {
+    const selectedPaths = Array.isArray(args?.selectedPaths)
+      ? new Set(args.selectedPaths.filter(item => typeof item === 'string' && item.trim()).map(normalizeRelativePath))
+      : null;
+    const data = scanLocalSkillFolder(rootInput, selectedPaths);
+    return {
+      content: [{ type: 'text', text: `Found ${data.skills.length} local Skill(s) in ${data.rootPath}` }],
+      structuredContent: {
+        ok: true,
+        data,
+      },
+    };
+  } catch (err) {
+    return {
+      isError: true,
+      content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }],
+    };
+  }
+}
+
+function scanLocalSkillFolder(rootInput, selectedPaths) {
+  const rootPath = resolveLocalPath(rootInput);
+  const rootStat = safeStat(rootPath);
+  if (!rootStat || !rootStat.isDirectory()) {
+    throw new Error(`Local Skill root is not a readable directory: ${rootPath}`);
+  }
+
+  const warnings = [];
+  const allSkillPaths = findLocalSkillPaths(rootPath);
+  if (allSkillPaths.length === 0) {
+    throw new Error(`No SKILL.md found under ${rootPath}`);
+  }
+  if (allSkillPaths.length > MAX_LOCAL_SKILLS) {
+    warnings.push(`Found ${allSkillPaths.length} Skills; preview is limited to ${MAX_LOCAL_SKILLS}.`);
+  }
+
+  const limitedPaths = allSkillPaths.slice(0, MAX_LOCAL_SKILLS);
+  const selected = selectedPaths
+    ? limitedPaths.filter(path => selectedPaths.has(path))
+    : limitedPaths;
+  if (selectedPaths && selected.length === 0) {
+    throw new Error('Selected local Skill paths were not found under the root path.');
+  }
+
+  let totalContentBytes = 0;
+  const skills = [];
+  for (const skillPath of selected) {
+    const item = readLocalSkill(rootPath, skillPath, totalContentBytes);
+    totalContentBytes += item.contentBytes;
+    skills.push(item.skill);
+    warnings.push(...item.warnings);
+  }
+
+  return {
+    rootPath,
+    displayName: basename(rootPath) || rootPath,
+    directoryName: basename(rootPath) || rootPath,
+    skills,
+    warnings: dedupeStrings(warnings),
+    truncated: allSkillPaths.length > MAX_LOCAL_SKILLS || warnings.some(warning => warning.includes('content budget')),
+  };
+}
+
+function findLocalSkillPaths(rootPath) {
+  const result = [];
+  walkLocalDirectory(rootPath, '', (relativePath, absolutePath, entry) => {
+    if (!entry.isFile()) return;
+    if (entry.name === 'SKILL.md') result.push(normalizeRelativePath(relativePath));
+  });
+  return result.sort((a, b) => a.localeCompare(b));
+}
+
+function readLocalSkill(rootPath, skillPath, usedContentBytes) {
+  const absoluteSkillPath = resolveUnderRoot(rootPath, skillPath);
+  const skillStat = safeStat(absoluteSkillPath);
+  if (!skillStat || !skillStat.isFile()) {
+    throw new Error(`Local Skill file is not readable: ${skillPath}`);
+  }
+  if (skillStat.size > MAX_LOCAL_SKILL_BYTES) {
+    throw new Error(`${skillPath} exceeds the SKILL.md size limit (${skillStat.size} bytes).`);
+  }
+
+  const content = readTextFile(absoluteSkillPath);
+  const directory = normalizeRelativePath(dirname(skillPath));
+  const directoryPath = dirname(absoluteSkillPath);
+  const bundle = collectLocalSkillResources(rootPath, directory, content, usedContentBytes + Buffer.byteLength(content, 'utf8'));
+  const skill = {
+    path: skillPath,
+    directory,
+    directoryPath,
+    content,
+    bodyBytes: Buffer.byteLength(content, 'utf8'),
+    includedFiles: bundle.includedFiles,
+    omittedFiles: bundle.omittedFiles,
+    scriptFiles: bundle.scriptFiles,
+    warnings: bundle.warnings,
+  };
+  const contentBytes = skill.bodyBytes + bundle.includedFiles.reduce((sum, file) => sum + file.bytes, 0);
+  return {
+    skill,
+    contentBytes,
+    warnings: bundle.warnings,
+  };
+}
+
+function collectLocalSkillResources(rootPath, directory, skillBody, startingContentBytes) {
+  const prefix = directory ? directory + '/' : '';
+  const candidates = [];
+  walkLocalDirectory(resolveUnderRoot(rootPath, directory || '.'), prefix, (relativePath, absolutePath, entry) => {
+    if (!entry.isFile()) return;
+    const normalized = normalizeRelativePath(relativePath);
+    if (normalized === `${prefix}SKILL.md` || normalized.endsWith('/SKILL.md')) return;
+    const stat = safeStat(absolutePath);
+    if (!stat) return;
+    candidates.push({
+      path: normalized,
+      absolutePath,
+      bytes: stat.size,
+    });
+  }, { stopAtNestedSkillRoots: true });
+
+  const scriptFiles = candidates
+    .filter(candidate => isLocalScriptFile(candidate.path))
+    .map(({ path, bytes }) => ({ path, bytes }));
+  const textCandidates = candidates
+    .filter(candidate => isLocalTextResource(candidate.path))
+    .sort((a, b) => rankLocalResource(a.path, skillBody) - rankLocalResource(b.path, skillBody) || a.path.localeCompare(b.path));
+
+  const includedFiles = [];
+  const omittedFiles = [];
+  const warnings = [];
+  let resourceBytes = 0;
+  let totalBytes = startingContentBytes;
+
+  for (const candidate of textCandidates) {
+    if (includedFiles.length >= MAX_LOCAL_RESOURCE_FILES_PER_SKILL) {
+      omittedFiles.push({ path: candidate.path, bytes: candidate.bytes });
+      continue;
+    }
+    if (candidate.bytes > MAX_LOCAL_RESOURCE_FILE_BYTES) {
+      omittedFiles.push({ path: candidate.path, bytes: candidate.bytes });
+      warnings.push(`${candidate.path} exceeds the per-file resource limit and was not bundled.`);
+      continue;
+    }
+    if (resourceBytes + candidate.bytes > MAX_LOCAL_RESOURCE_BYTES_PER_SKILL) {
+      omittedFiles.push({ path: candidate.path, bytes: candidate.bytes });
+      continue;
+    }
+    if (totalBytes + candidate.bytes > MAX_LOCAL_TOTAL_CONTENT_BYTES) {
+      omittedFiles.push({ path: candidate.path, bytes: candidate.bytes });
+      warnings.push(`${candidate.path} was omitted because the local Skill preview reached the content budget.`);
+      continue;
+    }
+
+    const content = readTextFile(candidate.absolutePath);
+    const bytes = Buffer.byteLength(content, 'utf8');
+    resourceBytes += bytes;
+    totalBytes += bytes;
+    includedFiles.push({ path: candidate.path, bytes, content });
+  }
+
+  if (omittedFiles.length > 0) {
+    warnings.push(`${omittedFiles.length} local supporting file(s) were omitted.`);
+  }
+
+  return { includedFiles, omittedFiles, scriptFiles, warnings: dedupeStrings(warnings) };
+}
+
+function walkLocalDirectory(rootPath, prefix, visit, options = {}) {
+  const stack = [{ absolutePath: rootPath, relativePrefix: prefix }];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = safeReadDirectory(current.absolutePath);
+    for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.svn' || entry.name === '.hg') continue;
+      const absolutePath = join(current.absolutePath, entry.name);
+      const relativePath = normalizeRelativePath(join(current.relativePrefix, entry.name));
+      visit(relativePath, absolutePath, entry);
+      if (entry.isDirectory()) {
+        if (options.stopAtNestedSkillRoots && hasLocalSkillFile(absolutePath)) continue;
+        stack.push({ absolutePath, relativePrefix: relativePath });
+      }
+    }
+  }
+}
+
+function resolveLocalPath(input) {
+  const trimmed = input.trim();
+  if (trimmed === '~') return homedir();
+  if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+    return resolve(homedir(), trimmed.slice(2));
+  }
+  return resolve(trimmed);
+}
+
+function resolveUnderRoot(rootPath, relativePath) {
+  const resolved = resolve(rootPath, relativePath);
+  const rel = relative(rootPath, resolved);
+  if (rel.startsWith('..') || rel === '..' || isAbsolute(rel)) {
+    throw new Error(`Path escapes local Skill root: ${relativePath}`);
+  }
+  return resolved;
+}
+
+function readTextFile(filePath) {
+  return readFileSync(filePath, 'utf8');
+}
+
+function safeReadDirectory(dir) {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function safeStat(path) {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
+}
+
+function hasLocalSkillFile(directoryPath) {
+  return safeStat(join(directoryPath, 'SKILL.md'))?.isFile() === true;
+}
+
+function isLocalTextResource(path) {
+  return LOCAL_TEXT_RESOURCE_EXTENSIONS.has(pathExtension(path));
+}
+
+function isLocalScriptFile(path) {
+  return LOCAL_SCRIPT_EXTENSIONS.has(pathExtension(path));
+}
+
+function rankLocalResource(path, skillBody) {
+  const relativeName = path.split('/').slice(-2).join('/');
+  if (skillBody.includes(path) || skillBody.includes(relativeName)) return 0;
+  if (path.includes('/agents/')) return 1;
+  if (path.includes('/references/')) return 2;
+  if (path.includes('/templates/')) return 3;
+  if (path.includes('/examples/')) return 4;
+  return 5;
+}
+
+function pathExtension(path) {
+  const name = path.split('/').pop() ?? '';
+  const index = name.lastIndexOf('.');
+  return index >= 0 ? name.slice(index).toLowerCase() : '';
+}
+
+function normalizeRelativePath(path) {
+  const normalized = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  return normalized === '.' ? '' : normalized;
+}
+
+function dedupeStrings(values) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 // --- Shell execution ---

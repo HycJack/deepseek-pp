@@ -6,8 +6,7 @@ describe('createShellMcpPresetInput', () => {
     const preset = createShellMcpPresetInput();
 
     expect(preset.enabled).toBe(false);
-    expect(preset.allowlist).toEqual({ mode: 'allow', toolNames: ['shell_status', 'python_status'] });
+    expect(preset.allowlist).toEqual({ mode: 'allow', toolNames: ['shell_status', 'python_status', 'local_skill_preview', 'local_folder_pick'] });
     expect(preset.execution).toEqual({ enabled: false, mode: 'manual' });
   });
 });
-

@@ -1,4 +1,4 @@
-import type { GitHubSkillSource, Skill } from '../types';
+import type { GitHubSkillSource, LocalSkillSource, Skill, SkillImportSource } from '../types';
 import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n';
 import { BUILTIN_SKILLS, getLocalizedBuiltinSkills } from './builtin';
 
@@ -107,16 +107,21 @@ export async function setSkillEnabled(name: string, enabled: boolean): Promise<v
   });
 }
 
-export async function getAllSkillSources(): Promise<GitHubSkillSource[]> {
+export async function getAllSkillSources(): Promise<SkillImportSource[]> {
   const data = await chrome.storage.local.get(SOURCES_STORAGE_KEY) as Record<string, unknown>;
   const storedSources = data[SOURCES_STORAGE_KEY];
   if (!Array.isArray(storedSources)) return [];
-  return storedSources.filter(isGitHubSkillSource);
+  return storedSources.filter(isSkillImportSource);
 }
 
-export async function getSkillSourceById(sourceId: string): Promise<GitHubSkillSource | null> {
+export async function getSkillSourceById(sourceId: string): Promise<SkillImportSource | null> {
   const sources = await getAllSkillSources();
   return sources.find((source) => source.id === sourceId) ?? null;
+}
+
+export async function getGitHubSkillSourceById(sourceId: string): Promise<GitHubSkillSource | null> {
+  const source = await getSkillSourceById(sourceId);
+  return source?.provider === 'github' ? source : null;
 }
 
 export async function saveGitHubSkillSource(source: GitHubSkillSource): Promise<void> {
@@ -131,6 +136,20 @@ export async function saveGitHubSkillSource(source: GitHubSkillSource): Promise<
 
 export async function upsertGitHubSkillSource(
   source: GitHubSkillSource,
+  incomingSkills: Skill[],
+): Promise<{ imported: Skill[]; replaced: number; renamed: number }> {
+  return upsertImportedSkillSource(source, incomingSkills);
+}
+
+export async function upsertLocalSkillSource(
+  source: LocalSkillSource,
+  incomingSkills: Skill[],
+): Promise<{ imported: Skill[]; replaced: number; renamed: number }> {
+  return upsertImportedSkillSource(source, incomingSkills);
+}
+
+async function upsertImportedSkillSource(
+  source: SkillImportSource,
   incomingSkills: Skill[],
 ): Promise<{ imported: Skill[]; replaced: number; renamed: number }> {
   const [existingUserSkills, existingSources] = await Promise.all([
@@ -171,7 +190,7 @@ export async function upsertGitHubSkillSource(
     ...existingUserSkills.filter((skill) => skill.remote?.sourceId !== source.id),
     ...imported,
   ];
-  const nextSource: GitHubSkillSource = {
+  const nextSource: SkillImportSource = {
     ...source,
     skillPaths: imported.map((skill) => skill.remote?.path).filter((path): path is string => Boolean(path)),
     importedSkillNames: imported.map((skill) => skill.name),
@@ -190,6 +209,10 @@ export async function upsertGitHubSkillSource(
 }
 
 export async function deleteGitHubSkillSource(sourceId: string): Promise<void> {
+  await deleteSkillSource(sourceId);
+}
+
+export async function deleteSkillSource(sourceId: string): Promise<void> {
   const [userSkills, sources] = await Promise.all([
     getUserSkills(),
     getAllSkillSources(),
@@ -200,9 +223,9 @@ export async function deleteGitHubSkillSource(sourceId: string): Promise<void> {
   });
 }
 
-export async function replaceAllSkillSources(sources: GitHubSkillSource[]): Promise<void> {
+export async function replaceAllSkillSources(sources: SkillImportSource[]): Promise<void> {
   await chrome.storage.local.set({
-    [SOURCES_STORAGE_KEY]: sources.filter(isGitHubSkillSource),
+    [SOURCES_STORAGE_KEY]: sources.filter(isSkillImportSource),
   });
 }
 
@@ -263,6 +286,20 @@ function isGitHubSkillSource(value: unknown): value is GitHubSkillSource {
     typeof source.owner === 'string' &&
     typeof source.repo === 'string' &&
     Array.isArray(source.skillPaths);
+}
+
+function isLocalSkillSource(value: unknown): value is LocalSkillSource {
+  if (!value || typeof value !== 'object') return false;
+  const source = value as LocalSkillSource;
+  return source.provider === 'local' &&
+    typeof source.id === 'string' &&
+    typeof source.rootPath === 'string' &&
+    typeof source.displayName === 'string' &&
+    Array.isArray(source.skillPaths);
+}
+
+function isSkillImportSource(value: unknown): value is SkillImportSource {
+  return isGitHubSkillSource(value) || isLocalSkillSource(value);
 }
 
 async function removeRemoteSkillFromSource(sourceId: string, path: string, name: string): Promise<void> {

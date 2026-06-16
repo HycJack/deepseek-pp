@@ -20,7 +20,9 @@ const SOURCE_LABELS: Record<string, { labelKey: LocaleMessageKey; className: str
 
 export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: Props) {
   const { t } = useI18n();
-  const badge = SOURCE_LABELS[skill.source];
+  const badge = skill.remote?.provider === 'local'
+    ? { labelKey: 'sidepanel.skill.sources.local' as LocaleMessageKey, className: 'ds-badge-success' }
+    : SOURCE_LABELS[skill.source];
   const enabled = skill.enabled !== false;
   const hasActions = Boolean(onEdit || onDelete || onToggleEnabled);
   const toggleLabel = enabled
@@ -95,14 +97,22 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
       {skill.remote && (
         <div className="flex flex-wrap gap-1.5 mt-2 text-[10px]" style={{ color: 'var(--ds-text-tertiary)' }}>
           <span className="ds-tag px-1.5 py-0.5 rounded-full">
-            {skill.remote.repository}
+            {skill.remote.provider === 'local'
+              ? skill.remote.localDisplayName ?? t('sidepanel.skill.sources.local')
+              : skill.remote.repository}
           </span>
           <span className="ds-tag px-1.5 py-0.5 rounded-full">
             {skill.remote.path}
           </span>
-          <span className="ds-tag px-1.5 py-0.5 rounded-full">
-            {skill.remote.licenseSpdxId ?? skill.remote.licenseName ?? t('sidepanel.skill.unknownLicense')}
-          </span>
+          {skill.remote.provider === 'local' ? (
+            <span className="ds-tag px-1.5 py-0.5 rounded-full">
+              {skill.remote.localDirectory ?? skill.remote.localRootPath}
+            </span>
+          ) : (
+            <span className="ds-tag px-1.5 py-0.5 rounded-full">
+              {skill.remote.licenseSpdxId ?? skill.remote.licenseName ?? t('sidepanel.skill.unknownLicense')}
+            </span>
+          )}
           {skill.remote.upstreamVersion && (
             <span className="ds-tag px-1.5 py-0.5 rounded-full">
               v{skill.remote.upstreamVersion}
