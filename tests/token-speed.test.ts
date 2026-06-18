@@ -4,6 +4,11 @@ import {
   createResponseTokenSpeedTracker,
   type ResponseTokenSpeedPayload,
 } from '../core/interceptor/token-speed';
+import {
+  extractResponseUsageStatsFromParsed,
+  parseSSEChunk,
+  parseSSEData,
+} from '../core/interceptor/sse-parser';
 
 describe('estimateTokenUnits', () => {
   it('estimates ASCII text at ~0.3 token per character', () => {
@@ -71,5 +76,90 @@ describe('createResponseTokenSpeedTracker', () => {
     const afterFirst = payloads[payloads.length - 1];
     expect(afterFirst.tokensPerSecond).toBe(0);
     tracker.finish();
+  });
+
+  it('uses server token usage and server timestamps when available', () => {
+    const { tracker, payloads, advanceTo } = setupTracker();
+    advanceTo(100);
+    tracker.updateServerStats({ modelType: 'vision', insertedAt: 1000 });
+    tracker.append('hello world');
+    tracker.updateServerStats({ accumulatedTokenUsage: 3302 });
+    tracker.finish();
+    tracker.updateServerStats({ updatedAt: 1003.11 });
+
+    const final = payloads[payloads.length - 1];
+    expect(final.active).toBe(false);
+    expect(final.modelType).toBe('vision');
+    expect(final.accumulatedTokens).toBe(3302);
+    expect(final.tokenSource).toBe('server');
+    expect(final.speedSource).toBe('server');
+    expect(final.elapsedMs).toBe(3110);
+    expect(final.tokensPerSecond).toBeCloseTo(3302 / 3.11, 5);
+  });
+
+  it('keeps estimated TPS until the server time window is complete', () => {
+    const { tracker, payloads, advanceTo } = setupTracker();
+    tracker.updateServerStats({ insertedAt: 1000 });
+    tracker.updateServerStats({ updatedAt: 1000.01 });
+    advanceTo(1000);
+    tracker.append('你好');
+    advanceTo(2000);
+    tracker.append('世界');
+    tracker.updateServerStats({ accumulatedTokenUsage: 99 });
+    tracker.finish();
+
+    const final = payloads[payloads.length - 1];
+    expect(final.accumulatedTokens).toBe(99);
+    expect(final.tokenSource).toBe('server');
+    expect(final.speedSource).toBe('estimated');
+    expect(final.tokensPerSecond).toBeCloseTo(1.2, 5);
+  });
+
+  it('handles server token usage and completion time from the same stats patch', () => {
+    const { tracker, payloads } = setupTracker();
+    tracker.updateServerStats({ insertedAt: 2000 });
+    tracker.finish();
+    tracker.updateServerStats({ accumulatedTokenUsage: 120, updatedAt: 2002 });
+
+    const final = payloads[payloads.length - 1];
+    expect(final.accumulatedTokens).toBe(120);
+    expect(final.speedSource).toBe('server');
+    expect(final.tokensPerSecond).toBe(60);
+  });
+});
+
+describe('extractResponseUsageStatsFromParsed', () => {
+  function parseOne(block: string) {
+    const event = parseSSEChunk(block)[0];
+    if (!event) throw new Error('missing SSE event');
+    return {
+      event,
+      parsed: parseSSEData(event.data),
+    };
+  }
+
+  it('extracts ready model type and update_session timestamps', () => {
+    const ready = parseOne('event: ready\ndata: {"request_message_id":1,"response_message_id":2,"model_type":"vision"}\n\n');
+    const update = parseOne('event: update_session\ndata: {"updated_at":1781763676.655633}\n\n');
+
+    expect(extractResponseUsageStatsFromParsed(ready.parsed, ready.event.type)).toEqual({
+      modelType: 'vision',
+    });
+    expect(extractResponseUsageStatsFromParsed(update.parsed, update.event.type)).toEqual({
+      updatedAt: 1781763676.655633,
+    });
+  });
+
+  it('extracts inserted_at and accumulated_token_usage from response payloads and batches', () => {
+    const start = parseOne('data: {"v":{"response":{"inserted_at":1781763673.5456538,"accumulated_token_usage":0}}}\n\n');
+    const batch = parseOne('data: {"p":"response","o":"BATCH","v":[{"p":"accumulated_token_usage","v":3302},{"p":"quasi_status","v":"FINISHED"}]}\n\n');
+
+    expect(extractResponseUsageStatsFromParsed(start.parsed, start.event.type)).toEqual({
+      insertedAt: 1781763673.5456538,
+      accumulatedTokenUsage: 0,
+    });
+    expect(extractResponseUsageStatsFromParsed(batch.parsed, batch.event.type)).toEqual({
+      accumulatedTokenUsage: 3302,
+    });
   });
 });

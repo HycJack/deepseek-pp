@@ -234,6 +234,7 @@ let tokenSpeedMountTimer: ReturnType<typeof setTimeout> | null = null;
 let lastTokenSpeedProgress: ResponseTokenSpeedPayload = createIdleTokenSpeedProgress();
 let tokenSpeedRouteKey = '';
 let tokenSpeedRouteTimer: ReturnType<typeof setInterval> | null = null;
+const recordedUsageProgressSignatures = new Map<string, string>();
 let multimodalMediaObserver: MutationObserver | null = null;
 let multimodalMediaMountTimer: ReturnType<typeof setTimeout> | null = null;
 let multimodalMediaButtonEl: HTMLButtonElement | null = null;
@@ -926,12 +927,14 @@ function mountConversationExportActions(): number {
     mountedCount += 1;
   }
 
+  renderTokenSpeedIndicator(lastTokenSpeedProgress);
   return mountedCount;
 }
 
 function removeConversationExportActions() {
   document.querySelectorAll(`.${EXPORT_ACTION_CLASS}`)
     .forEach((el) => el.remove());
+  removeTokenSpeedIndicator();
 }
 
 function getAssistantExportMessages(): Element[] {
@@ -3173,6 +3176,7 @@ function normalizeResponseTokenSpeedPayload(payload: unknown): ResponseTokenSpee
   if (!payload || typeof payload !== 'object') return null;
   const value = payload as Partial<ResponseTokenSpeedPayload>;
   const estimatedTokens = toFiniteNumber(value.estimatedTokens);
+  const accumulatedTokens = value.accumulatedTokens === null ? null : toFiniteNumber(value.accumulatedTokens);
   const tokensPerSecond = toFiniteNumber(value.tokensPerSecond);
   const elapsedMs = toFiniteNumber(value.elapsedMs);
   const textLength = toFiniteNumber(value.textLength);
@@ -3187,11 +3191,18 @@ function normalizeResponseTokenSpeedPayload(payload: unknown): ResponseTokenSpee
   }
 
   return {
+    requestId: typeof value.requestId === 'string' ? value.requestId : undefined,
+    chatSessionId: typeof value.chatSessionId === 'string' ? value.chatSessionId : null,
+    assistantMessageId: typeof value.assistantMessageId === 'number' ? value.assistantMessageId : null,
     active: value.active === true,
     estimatedTokens,
+    accumulatedTokens,
     tokensPerSecond,
     elapsedMs,
     textLength,
+    tokenSource: value.tokenSource === 'server' ? 'server' : 'estimated',
+    speedSource: value.speedSource === 'server' ? 'server' : 'estimated',
+    modelType: typeof value.modelType === 'string' ? value.modelType : null,
   };
 }
 
@@ -3203,31 +3214,95 @@ function updateTokenSpeedIndicator(progress: ResponseTokenSpeedPayload) {
   tokenSpeedRouteKey = getTokenSpeedRouteKey();
   lastTokenSpeedProgress = progress;
   renderTokenSpeedIndicator(progress);
+  recordUsageProgress(progress);
 }
 
 function createIdleTokenSpeedProgress(): ResponseTokenSpeedPayload {
   return {
+    requestId: undefined,
+    chatSessionId: null,
+    assistantMessageId: null,
     active: false,
     estimatedTokens: 0,
+    accumulatedTokens: null,
     tokensPerSecond: 0,
     elapsedMs: 0,
     textLength: 0,
+    tokenSource: 'estimated',
+    speedSource: 'estimated',
+    modelType: null,
   };
+}
+
+function recordUsageProgress(progress: ResponseTokenSpeedPayload) {
+  if (progress.active || !progress.requestId) return;
+  const totalTokens = progress.accumulatedTokens ?? progress.estimatedTokens;
+  if (!Number.isFinite(totalTokens) || totalTokens <= 0) return;
+
+  const signature = [
+    Math.round(totalTokens),
+    progress.tokenSource,
+    Math.round(progress.tokensPerSecond * 100) / 100,
+    progress.speedSource,
+    progress.modelType ?? '',
+    progress.assistantMessageId ?? '',
+  ].join('|');
+
+  if (recordedUsageProgressSignatures.get(progress.requestId) === signature) return;
+  recordedUsageProgressSignatures.set(progress.requestId, signature);
+  if (recordedUsageProgressSignatures.size > 200) {
+    const firstKey = recordedUsageProgressSignatures.keys().next().value;
+    if (typeof firstKey === 'string') recordedUsageProgressSignatures.delete(firstKey);
+  }
+
+  void sendRuntimeMessage({
+    type: 'RECORD_USAGE_TURN',
+    payload: {
+      id: progress.requestId,
+      recordedAt: Date.now(),
+      source: 'deepseek-web',
+      chatSessionId: progress.chatSessionId ?? getCurrentChatSessionId(),
+      assistantMessageId: progress.assistantMessageId ?? null,
+      modelType: progress.modelType,
+      totalTokens: Math.round(totalTokens),
+      tokenSource: progress.tokenSource,
+      tps: progress.tokensPerSecond,
+      speedSource: progress.speedSource,
+      elapsedMs: progress.elapsedMs,
+      messageCount: 2,
+    },
+  });
 }
 
 function renderTokenSpeedIndicator(progress: ResponseTokenSpeedPayload): boolean {
   const badge = ensureTokenSpeedIndicator();
   if (!badge) return false;
 
+  const tokens = progress.accumulatedTokens ?? progress.estimatedTokens;
+  const tokenText = formatTokenCount(tokens);
   const speed = formatTokenSpeed(progress.tokensPerSecond);
-  badge.textContent = speed;
+  badge.textContent = `${tokenText} tok · ${speed}`;
   badge.dataset.active = progress.active ? 'true' : 'false';
-  badge.setAttribute('aria-label', `Token output speed ${speed}`);
+  badge.dataset.tokenSource = progress.tokenSource;
+  badge.dataset.speedSource = progress.speedSource;
+  badge.setAttribute('aria-label', `Accumulated tokens ${tokenText}, token output speed ${speed}`);
   badge.setAttribute('title', contentT('content.tokenSpeed.title', {
+    tokens: `${tokenText} tok`,
     speed,
     idle: progress.active ? '' : contentT('content.tokenSpeed.idleSuffix'),
+    tokenSource: progress.tokenSource === 'server'
+      ? contentT('content.tokenSpeed.sourceServer')
+      : contentT('content.tokenSpeed.sourceEstimated'),
+    speedSource: progress.speedSource === 'server'
+      ? contentT('content.tokenSpeed.sourceServer')
+      : contentT('content.tokenSpeed.sourceEstimated'),
   }));
   return true;
+}
+
+function formatTokenCount(tokens: number): string {
+  const safeTokens = Number.isFinite(tokens) && tokens > 0 ? Math.round(tokens) : 0;
+  return new Intl.NumberFormat(currentContentLocale).format(safeTokens);
 }
 
 function formatTokenSpeed(tokensPerSecond: number): string {
@@ -3288,7 +3363,7 @@ function scheduleTokenSpeedIndicatorMountRefresh() {
   tokenSpeedMountTimer = setTimeout(() => {
     tokenSpeedMountTimer = null;
     applyCurrentRouteChange();
-    if (isTokenSpeedIndicatorMountedOnCurrentInput()) return;
+    if (isTokenSpeedIndicatorMountedInConversation()) return;
     renderTokenSpeedIndicator(lastTokenSpeedProgress);
   }, TOKEN_SPEED_MOUNT_DEBOUNCE_MS);
 }
@@ -3325,6 +3400,7 @@ function applyCurrentRouteChange(): boolean {
   handleMultimodalMediaRouteChange(previousRouteKey, nextRouteKey);
   tokenSpeedRouteKey = nextRouteKey;
   lastTokenSpeedProgress = createIdleTokenSpeedProgress();
+  removeTokenSpeedIndicator();
   return true;
 }
 
@@ -3366,41 +3442,57 @@ function getTokenSpeedRouteKey(): string {
   return `${location.pathname}${location.search}`;
 }
 
-function isTokenSpeedIndicatorMountedOnCurrentInput(): boolean {
-  const inputBox = findDeepSeekInputBox();
-  return Boolean(inputBox && tokenSpeedEl?.isConnected && tokenSpeedEl.parentElement === inputBox);
+function isTokenSpeedIndicatorMountedInConversation(): boolean {
+  const sessionId = getCurrentChatSessionId();
+  const previous = tokenSpeedEl?.previousElementSibling;
+  return Boolean(
+    tokenSpeedEl?.isConnected &&
+    previous instanceof HTMLButtonElement &&
+    previous.classList.contains(EXPORT_ACTION_CLASS) &&
+    (!sessionId || previous.dataset.dppExportSessionId === sessionId),
+  );
 }
 
 function removeTokenSpeedIndicator() {
-  const parent = tokenSpeedEl?.parentElement;
   tokenSpeedEl?.remove();
-  parent?.removeAttribute('data-dpp-token-speed-anchor');
   tokenSpeedEl = null;
 }
 
 function ensureTokenSpeedIndicator(): HTMLElement | null {
   injectTokenSpeedStyles();
 
-  const inputBox = findDeepSeekInputBox();
-  if (!inputBox) return null;
+  const anchorButton = findTokenStatsAnchorButton();
+  if (!anchorButton) return null;
 
-  if (tokenSpeedEl && tokenSpeedEl.isConnected && tokenSpeedEl.parentElement === inputBox) {
+  if (tokenSpeedEl && tokenSpeedEl.isConnected && tokenSpeedEl.previousElementSibling === anchorButton) {
     return tokenSpeedEl;
   }
 
-  const previousParent = tokenSpeedEl?.parentElement;
   tokenSpeedEl?.remove();
-  previousParent?.removeAttribute('data-dpp-token-speed-anchor');
-  inputBox.setAttribute('data-dpp-token-speed-anchor', '');
 
   const badge = document.createElement('div');
   badge.id = TOKEN_SPEED_BADGE_ID;
   badge.className = 'dpp-token-speed-badge';
   badge.setAttribute('role', 'status');
   badge.setAttribute('aria-live', 'polite');
-  inputBox.appendChild(badge);
+  anchorButton.insertAdjacentElement('afterend', badge);
   tokenSpeedEl = badge;
   return badge;
+}
+
+function findTokenStatsAnchorButton(): HTMLButtonElement | null {
+  const sessionId = getCurrentChatSessionId();
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(`.${EXPORT_ACTION_CLASS}`))
+    .filter((button) => {
+      if (!isVisibleElement(button)) return false;
+      return !sessionId || button.dataset.dppExportSessionId === sessionId;
+    })
+    .sort((a, b) => {
+      const aRect = a.getBoundingClientRect();
+      const bRect = b.getBoundingClientRect();
+      return aRect.top - bRect.top || aRect.left - bRect.left;
+    });
+  return buttons[buttons.length - 1] ?? null;
 }
 
 function injectTokenSpeedStyles() {
@@ -3409,26 +3501,23 @@ function injectTokenSpeedStyles() {
   const style = document.createElement('style');
   style.id = TOKEN_SPEED_STYLE_ID;
   style.textContent = `
-    [data-dpp-token-speed-anchor] {
-      position: relative !important;
-    }
-
     .dpp-token-speed-badge {
-      position: absolute;
-      top: 8px;
-      right: 12px;
-      z-index: 30;
       display: inline-flex;
+      flex: 0 0 auto;
       align-items: center;
+      justify-content: center;
       min-height: 20px;
-      max-width: 96px;
-      padding: 2px 7px;
+      max-width: min(180px, 45vw);
+      margin-left: 4px;
+      padding: 2px 8px;
       border: 1px solid rgba(77, 107, 254, 0.18);
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.88);
       color: #4b5563;
       font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       pointer-events: none;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
       backdrop-filter: blur(10px);

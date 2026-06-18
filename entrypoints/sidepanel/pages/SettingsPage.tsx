@@ -8,11 +8,12 @@ import AppearanceSubPage from '../components/settings/AppearanceSubPage';
 import DataSubPage from '../components/settings/DataSubPage';
 import GeneralSubPage from '../components/settings/GeneralSubPage';
 import PromptSubPage from '../components/settings/PromptSubPage';
+import UsageSubPage from '../components/settings/UsageSubPage';
 import VoiceSubPage from '../components/settings/VoiceSubPage';
 import { SkeletonList, SubTabs } from '../components/settings/primitives';
 import { useSettingsState } from '../components/settings/useSettingsState';
 
-type SubTab = 'general' | 'api' | 'prompt' | 'voice' | 'appearance' | 'data' | 'about';
+type SubTab = 'general' | 'api' | 'prompt' | 'voice' | 'appearance' | 'usage' | 'data' | 'about';
 
 const SUB_TABS: { key: SubTab; labelKey: LocaleMessageKey }[] = [
   { key: 'general', labelKey: 'sidepanel.settings.tabs.general' },
@@ -20,6 +21,7 @@ const SUB_TABS: { key: SubTab; labelKey: LocaleMessageKey }[] = [
   { key: 'prompt', labelKey: 'sidepanel.settings.tabs.prompt' },
   { key: 'voice', labelKey: 'sidepanel.settings.tabs.voice' },
   { key: 'appearance', labelKey: 'sidepanel.settings.tabs.appearance' },
+  { key: 'usage', labelKey: 'sidepanel.settings.tabs.usage' },
   { key: 'data', labelKey: 'sidepanel.settings.tabs.data' },
   { key: 'about', labelKey: 'sidepanel.settings.tabs.about' },
 ];
@@ -30,6 +32,7 @@ const SUB_DESCRIPTION_KEY: Record<SubTab, LocaleMessageKey> = {
   prompt: 'sidepanel.settings.promptDescription',
   voice: 'sidepanel.settings.voiceDescription',
   appearance: 'sidepanel.settings.appearanceDescription',
+  usage: 'sidepanel.settings.usageDescription',
   data: 'sidepanel.settings.dataDescription',
   about: 'sidepanel.settings.aboutTagline',
 };
@@ -66,6 +69,7 @@ export default function SettingsPage() {
             {sub === 'prompt' && <PromptSubPage />}
             {sub === 'voice' && <VoiceSubPage />}
             {sub === 'appearance' && <AppearanceSubPage state={state} />}
+            {sub === 'usage' && <UsageSubPage />}
             {sub === 'data' && <DataSubPage state={state} />}
             {sub === 'about' && <AboutSubPage state={state} />}
           </>

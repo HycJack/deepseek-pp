@@ -31,6 +31,10 @@ import type {
   ToolProviderIdentity,
   ToolResult as GenericToolResult,
 } from './tool/types';
+import type {
+  UsageRangeDays as UsageRangeDaysType,
+  UsageTurnInput as UsageTurnInputType,
+} from './usage/types';
 
 export type {
   McpHeaderValue,
@@ -133,6 +137,18 @@ export type {
 } from './multimodal/media';
 
 export type {
+  UsageDailyModelSummary,
+  UsageDailySummary,
+  UsageHeatmapCell,
+  UsageModelSummary,
+  UsageRangeDays,
+  UsageRecordSource,
+  UsageSummary,
+  UsageTurnInput,
+  UsageTurnRecord,
+} from './usage/types';
+
+export type {
   VoiceCapabilityState,
   VoiceSettings,
 } from './voice/settings';
@@ -159,7 +175,7 @@ export type {
 export type MemoryType = 'user' | 'feedback' | 'topic' | 'reference';
 export type MemoryScope = 'global' | 'project';
 
-export type ModelType = 'expert' | null;
+export type ModelType = 'expert' | 'vision' | null;
 
 export type DeepSeekTheme = 'light' | 'dark';
 
@@ -529,6 +545,9 @@ export type MessageAction =
   | { type: 'SET_DEEPSEEK_THEME'; payload: { theme: DeepSeekTheme } }
   | { type: 'GET_MODEL_TYPE' }
   | { type: 'SET_MODEL_TYPE'; payload: ModelType }
+  | { type: 'RECORD_USAGE_TURN'; payload: UsageTurnInputType }
+  | { type: 'GET_USAGE_SUMMARY'; payload?: { rangeDays?: UsageRangeDaysType } }
+  | { type: 'CLEAR_USAGE_STATS' }
   | { type: 'GET_OFFICIAL_API_CHAT_CONFIG' }
   | { type: 'SAVE_OFFICIAL_API_CHAT_CONFIG'; payload: Partial<OfficialApiChatConfigType> }
   | { type: 'TOOL_CALL_EXECUTED'; payload: ToolCall }

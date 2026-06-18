@@ -10,7 +10,15 @@ import {
   getPartialXmlToolTagTailLength,
 } from '../tool/xml-tags';
 import { stripToolCallsFromHistory, stripToolCallsFromIDBResult } from './history-cleanup';
-import { extractResponseTextFromParsed, isResponseTextPatchPath, isStreamFinishedFromParsed, isThinkingPatchPath, parseSSEChunk, parseSSEData } from './sse-parser';
+import {
+  extractResponseTextFromParsed,
+  extractResponseUsageStatsFromParsed,
+  isResponseTextPatchPath,
+  isStreamFinishedFromParsed,
+  isThinkingPatchPath,
+  parseSSEChunk,
+  parseSSEData,
+} from './sse-parser';
 import { createResponseTokenSpeedTracker, type ResponseTokenSpeedPayload } from './token-speed';
 import { createStreamingToolTextAccumulator } from './streaming-tool-text';
 import { createStreamingToolCallParser } from './streaming-tool-call-parser';
@@ -902,17 +910,17 @@ export class XmlToolStreamFilter {
 
 function processCompleteSSEBlocks(
   text: string,
-  onParsed: (parsed: unknown) => void,
+  onParsed: (parsed: unknown, event: ReturnType<typeof parseSSEChunk>[number]) => void,
 ): void {
   const events = parseSSEChunk(text);
   for (const event of events) {
     const parsed = parseSSEData(event.data);
-    if (parsed) onParsed(parsed);
+    if (parsed) onParsed(parsed, event);
   }
 }
 
 export function createBufferedSSEParser(
-  onParsed: (parsed: unknown) => void,
+  onParsed: (parsed: unknown, event: ReturnType<typeof parseSSEChunk>[number]) => void,
 ): { append(text: string): void; flush(): void } {
   let buffer = '';
 
@@ -950,11 +958,14 @@ async function interceptFetchResponse(
     () => createManualChatToolCallSource(requestContext, assistantMessageId),
   );
   const speedTracker = createResponseTokenSpeedTracker(
-    hookState.onResponseTokenSpeed,
+    (progress) => hookState.onResponseTokenSpeed(
+      attachResponseContextToTokenSpeedProgress(progress, requestContext, assistantMessageId),
+    ),
     TOKEN_SPEED_EMIT_INTERVAL_MS,
   );
-  const fullTextParser = createBufferedSSEParser((parsed) => {
+  const fullTextParser = createBufferedSSEParser((parsed, event) => {
     assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
+    speedTracker.updateServerStats(extractResponseUsageStatsFromParsed(parsed, event.type));
     const eventText = extractCleanResponseTextForParsing(parsed);
     if (eventText) {
       responseToolState.append(eventText);
@@ -1023,6 +1034,20 @@ async function interceptFetchResponse(
   });
 }
 
+function attachResponseContextToTokenSpeedProgress(
+  progress: ResponseTokenSpeedPayload,
+  requestContext: RequestContext,
+  assistantMessageId: number | null,
+): ResponseTokenSpeedPayload {
+  return {
+    ...progress,
+    requestId: requestContext.requestId,
+    chatSessionId: requestContext.chatSessionId,
+    assistantMessageId,
+    modelType: progress.modelType ?? requestContext.promptOptions.modelType,
+  };
+}
+
 function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: RequestContext) {
   let lastLen = 0;
   let completed = false;
@@ -1035,7 +1060,9 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
     () => createManualChatToolCallSource(requestContext, assistantMessageId),
   );
   const speedTracker = createResponseTokenSpeedTracker(
-    hookState.onResponseTokenSpeed,
+    (progress) => hookState.onResponseTokenSpeed(
+      attachResponseContextToTokenSpeedProgress(progress, requestContext, assistantMessageId),
+    ),
     TOKEN_SPEED_EMIT_INTERVAL_MS,
   );
 
@@ -1065,8 +1092,9 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
       filteredResponse += new TextDecoder().decode(data);
     },
   } as unknown as ReadableStreamDefaultController<Uint8Array>;
-  const fullTextParser = createBufferedSSEParser((parsed) => {
+  const fullTextParser = createBufferedSSEParser((parsed, event) => {
     assistantMessageId = collectAssistantMessageId(parsed, assistantMessageId);
+    speedTracker.updateServerStats(extractResponseUsageStatsFromParsed(parsed, event.type));
     const text = extractCleanResponseTextForParsing(parsed);
     if (text) {
       responseToolState.append(text);

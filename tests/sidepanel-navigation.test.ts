@@ -23,6 +23,8 @@ beforeEach(() => {
       sendMessage: vi.fn(async (message: { type?: string }) => {
         if (message.type === 'GET_AUTH_STATUS') return { available: true, provider: 'deepseek-web' };
         if (message.type === 'GET_VOICE_SETTINGS') return {};
+        if (message.type === 'GET_USAGE_SUMMARY') return createUsageSummary();
+        if (message.type === 'CLEAR_USAGE_STATS') return { ok: true };
         return null;
       }),
       onMessage: {
@@ -77,6 +79,19 @@ describe('sidepanel navigation', () => {
     // Settings is split into sub-tabs; voice lives under the Voice tab.
     const settingsNav = container.querySelector('nav[aria-label="设置子导航"]');
     expect(settingsNav).toBeTruthy();
+    expect(navButtonLabels('设置子导航')).toEqual([
+      '通用',
+      'API',
+      '提示词',
+      '语音',
+      '外观',
+      '用量',
+      '数据',
+      '关于',
+    ]);
+    expect(navButtonLabels('设置子导航').indexOf('用量')).toBeLessThan(
+      navButtonLabels('设置子导航').indexOf('数据'),
+    );
     const voiceTab = Array.from(settingsNav!.querySelectorAll('button')).find(
       (button) => (button.textContent ?? '') === '语音',
     );
@@ -89,6 +104,24 @@ describe('sidepanel navigation', () => {
     expect(container.textContent).toContain('语音');
     expect(container.textContent).toContain('语音输入');
     expect(container.textContent).toContain('朗读回复');
+  });
+
+  it('renders usage statistics from the Settings sub-navigation', async () => {
+    await renderElement(React.createElement(SettingsPage));
+
+    const usageTab = Array.from(container.querySelectorAll('nav[aria-label="设置子导航"] button')).find(
+      (button) => (button.textContent ?? '') === '用量',
+    );
+    expect(usageTab).toBeTruthy();
+
+    await act(async () => {
+      usageTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Tokens 用量');
+    expect(container.textContent).toContain('DeepSeek Vision');
+    expect(container.textContent).toContain('按天 Token 趋势');
   });
 
   it('keeps the top navigation from shrinking behind long settings content', () => {
@@ -132,4 +165,60 @@ function getCssBlock(css: string, selector: string): string {
   const match = css.match(new RegExp(`${escaped}\\s*\\{(?<body>[^}]*)\\}`));
   expect(match?.groups?.body).toBeTruthy();
   return match!.groups!.body;
+}
+
+function createUsageSummary() {
+  const now = new Date(2026, 5, 18).getTime();
+  const days = Array.from({ length: 30 }, (_, index) => {
+    const timestamp = now - (29 - index) * 24 * 60 * 60 * 1000;
+    const active = index >= 27;
+    return {
+      day: new Date(timestamp).toISOString().slice(0, 10),
+      timestamp,
+      tokens: active ? 1100 + index * 10 : 0,
+      messageCount: active ? 2 : 0,
+      sessionCount: active ? 1 : 0,
+      turnCount: active ? 1 : 0,
+      models: active
+        ? [{ modelKey: 'vision', modelLabel: 'DeepSeek Vision', tokens: 1100 + index * 10 }]
+        : [],
+    };
+  });
+
+  return {
+    rangeDays: 30,
+    generatedAt: now,
+    totalTokens: 3302,
+    sessionCount: 2,
+    messageCount: 6,
+    turnCount: 3,
+    activeDays: 3,
+    currentStreak: 3,
+    serverTokenRecordCount: 3,
+    mostUsedModel: {
+      modelKey: 'vision',
+      modelLabel: 'DeepSeek Vision',
+      totalTokens: 3302,
+      turnCount: 3,
+      messageCount: 6,
+      sessionCount: 2,
+      share: 1,
+    },
+    days,
+    heatmap: days.map((day) => ({
+      day: day.day,
+      timestamp: day.timestamp,
+      tokens: day.tokens,
+      level: day.tokens > 0 ? 5 : 0,
+    })),
+    modelUsage: [{
+      modelKey: 'vision',
+      modelLabel: 'DeepSeek Vision',
+      totalTokens: 3302,
+      turnCount: 3,
+      messageCount: 6,
+      sessionCount: 2,
+      share: 1,
+    }],
+  };
 }

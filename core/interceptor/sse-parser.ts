@@ -1,5 +1,12 @@
 import type { SSEEvent } from '../types';
 
+export interface ResponseStreamUsageStats {
+  modelType?: string | null;
+  insertedAt?: number | null;
+  updatedAt?: number | null;
+  accumulatedTokenUsage?: number | null;
+}
+
 export function parseSSEChunk(chunk: string): SSEEvent[] {
   const events: SSEEvent[] = [];
   const blocks = chunk.split('\n\n');
@@ -38,6 +45,14 @@ export function parseSSEData(data: string): unknown | null {
   } catch {
     return null;
   }
+}
+
+export function extractResponseUsageStatsFromParsed(
+  parsed: unknown,
+  eventType?: string,
+): ResponseStreamUsageStats | null {
+  const stats = collectResponseUsageStats(parsed, eventType);
+  return hasResponseUsageStats(stats) ? stats : null;
 }
 
 export function isResponseTextPatchPath(path: unknown): path is string {
@@ -150,4 +165,114 @@ export function isStreamFinishedFromParsed(parsed: any): boolean {
     );
   }
   return false;
+}
+
+function collectResponseUsageStats(
+  parsed: unknown,
+  eventType?: string,
+): ResponseStreamUsageStats {
+  if (!parsed || typeof parsed !== 'object') return {};
+
+  const value = parsed as Record<string, unknown>;
+  let stats: ResponseStreamUsageStats = {};
+
+  if (eventType === 'ready' && typeof value.model_type === 'string') {
+    stats.modelType = value.model_type;
+  }
+
+  if (eventType === 'update_session') {
+    stats = mergeResponseUsageStats(stats, {
+      updatedAt: readFiniteNumber(value.updated_at),
+    });
+  }
+
+  if (value.o === 'BATCH' && Array.isArray(value.v)) {
+    for (const item of value.v) {
+      stats = mergeResponseUsageStats(stats, collectResponseUsageStats(item, eventType));
+    }
+  }
+
+  if (typeof value.p === 'string') {
+    stats = mergeResponseUsageStats(stats, collectPatchUsageStats(value));
+  }
+
+  if (value.response && typeof value.response === 'object') {
+    stats = mergeResponseUsageStats(stats, collectResponseObjectUsageStats(value.response));
+  }
+
+  if (value.v && typeof value.v === 'object' && !Array.isArray(value.v)) {
+    stats = mergeResponseUsageStats(stats, collectResponseUsageStats(value.v, eventType));
+  }
+
+  return stats;
+}
+
+function collectPatchUsageStats(value: Record<string, unknown>): ResponseStreamUsageStats {
+  const path = value.p;
+  if (typeof path !== 'string') return {};
+
+  if (path === 'response/accumulated_token_usage' || path === 'accumulated_token_usage') {
+    return { accumulatedTokenUsage: readNonNegativeNumber(value.v) };
+  }
+  if (path === 'response/inserted_at' || path === 'inserted_at') {
+    return { insertedAt: readFiniteNumber(value.v) };
+  }
+  if (path === 'response/updated_at' || path === 'updated_at') {
+    return { updatedAt: readFiniteNumber(value.v) };
+  }
+  if ((path === 'response/model_type' || path === 'model_type') && typeof value.v === 'string') {
+    return { modelType: value.v };
+  }
+  if (path === 'response' && value.v && typeof value.v === 'object' && !Array.isArray(value.v)) {
+    return collectResponseObjectUsageStats(value.v);
+  }
+  return {};
+}
+
+function collectResponseObjectUsageStats(value: unknown): ResponseStreamUsageStats {
+  if (!value || typeof value !== 'object') return {};
+  const response = value as Record<string, unknown>;
+  const stats: ResponseStreamUsageStats = {};
+  const insertedAt = readFiniteNumber(response.inserted_at);
+  const accumulatedTokenUsage = readNonNegativeNumber(response.accumulated_token_usage);
+  if (insertedAt !== null) stats.insertedAt = insertedAt;
+  if (accumulatedTokenUsage !== null) stats.accumulatedTokenUsage = accumulatedTokenUsage;
+  if (typeof response.model_type === 'string') {
+    stats.modelType = response.model_type;
+  }
+  return stats;
+}
+
+function mergeResponseUsageStats(
+  left: ResponseStreamUsageStats,
+  right: ResponseStreamUsageStats,
+): ResponseStreamUsageStats {
+  const merged = { ...left };
+  if ('modelType' in right && right.modelType !== null && right.modelType !== undefined) merged.modelType = right.modelType;
+  if ('insertedAt' in right && right.insertedAt !== null && right.insertedAt !== undefined) merged.insertedAt = right.insertedAt;
+  if ('updatedAt' in right && right.updatedAt !== null && right.updatedAt !== undefined) merged.updatedAt = right.updatedAt;
+  if (
+    'accumulatedTokenUsage' in right &&
+    right.accumulatedTokenUsage !== null &&
+    right.accumulatedTokenUsage !== undefined
+  ) {
+    merged.accumulatedTokenUsage = right.accumulatedTokenUsage;
+  }
+  return merged;
+}
+
+function hasResponseUsageStats(stats: ResponseStreamUsageStats): boolean {
+  return stats.modelType !== undefined ||
+    stats.insertedAt !== undefined ||
+    stats.updatedAt !== undefined ||
+    stats.accumulatedTokenUsage !== undefined;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function readNonNegativeNumber(value: unknown): number | null {
+  const number = readFiniteNumber(value);
+  return number !== null && number >= 0 ? number : null;
 }
