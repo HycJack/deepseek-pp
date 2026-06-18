@@ -202,38 +202,38 @@ function injectStyles() {
   style.id = 'dpp-skill-popup-css';
   style.textContent = `
 :root {
-  --dpp-skill-popup-bg: #FFFFFF;
-  --dpp-skill-popup-surface: #F7F8FA;
-  --dpp-skill-popup-border: #E5E7EB;
-  --dpp-skill-popup-divider: #F3F4F6;
-  --dpp-skill-popup-trigger-bg: #EEF1FF;
-  --dpp-skill-popup-trigger: #4D6BFE;
-  --dpp-skill-popup-desc: #9CA3AF;
-  --dpp-skill-popup-hint: #D1D5DB;
-  --dpp-skill-popup-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  --dpp-skill-popup-bg: var(--dpp-ui-surface, oklch(0.998 0.002 264));
+  --dpp-skill-popup-surface: var(--dpp-ui-surface-muted, oklch(0.965 0.005 264));
+  --dpp-skill-popup-border: var(--dpp-ui-border, oklch(0.90 0.008 264));
+  --dpp-skill-popup-divider: var(--dpp-ui-border-muted, oklch(0.94 0.006 264));
+  --dpp-skill-popup-trigger-bg: var(--dpp-ui-accent-soft, oklch(0.96 0.025 264));
+  --dpp-skill-popup-trigger: var(--dpp-ui-accent, oklch(0.62 0.19 264));
+  --dpp-skill-popup-desc: var(--dpp-ui-text-subtle, oklch(0.70 0.015 264));
+  --dpp-skill-popup-hint: var(--dpp-ui-border-hover, oklch(0.84 0.012 264));
+  --dpp-skill-popup-shadow: var(--dpp-ui-panel-shadow, -14px 0 40px oklch(0.25 0.04 264 / 0.14));
 }
 body.dpp-theme-dark {
-  --dpp-skill-popup-bg: #151922;
-  --dpp-skill-popup-surface: #1B202A;
-  --dpp-skill-popup-border: #2B3240;
-  --dpp-skill-popup-divider: #2B3240;
-  --dpp-skill-popup-trigger-bg: rgba(125, 145, 255, 0.16);
-  --dpp-skill-popup-trigger: #7D91FF;
-  --dpp-skill-popup-desc: #B5BDCB;
-  --dpp-skill-popup-hint: #838C9D;
-  --dpp-skill-popup-shadow: none;
+  --dpp-skill-popup-bg: var(--dpp-ui-surface);
+  --dpp-skill-popup-surface: var(--dpp-ui-surface-muted);
+  --dpp-skill-popup-border: var(--dpp-ui-border);
+  --dpp-skill-popup-divider: var(--dpp-ui-border-muted);
+  --dpp-skill-popup-trigger-bg: var(--dpp-ui-accent-soft);
+  --dpp-skill-popup-trigger: var(--dpp-ui-accent);
+  --dpp-skill-popup-desc: var(--dpp-ui-text-subtle);
+  --dpp-skill-popup-hint: var(--dpp-ui-border-hover);
+  --dpp-skill-popup-shadow: var(--dpp-ui-panel-shadow);
 }
 @media (prefers-color-scheme: dark) {
   body:not(.dpp-theme-light) {
-    --dpp-skill-popup-bg: #151922;
-    --dpp-skill-popup-surface: #1B202A;
-    --dpp-skill-popup-border: #2B3240;
-    --dpp-skill-popup-divider: #2B3240;
-    --dpp-skill-popup-trigger-bg: rgba(125, 145, 255, 0.16);
-    --dpp-skill-popup-trigger: #7D91FF;
-    --dpp-skill-popup-desc: #B5BDCB;
-    --dpp-skill-popup-hint: #838C9D;
-    --dpp-skill-popup-shadow: none;
+    --dpp-skill-popup-bg: var(--dpp-ui-surface);
+    --dpp-skill-popup-surface: var(--dpp-ui-surface-muted);
+    --dpp-skill-popup-border: var(--dpp-ui-border);
+    --dpp-skill-popup-divider: var(--dpp-ui-border-muted);
+    --dpp-skill-popup-trigger-bg: var(--dpp-ui-accent-soft);
+    --dpp-skill-popup-trigger: var(--dpp-ui-accent);
+    --dpp-skill-popup-desc: var(--dpp-ui-text-subtle);
+    --dpp-skill-popup-hint: var(--dpp-ui-border-hover);
+    --dpp-skill-popup-shadow: var(--dpp-ui-panel-shadow);
   }
 }
 .dpp-skill-popup {

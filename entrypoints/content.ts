@@ -2125,12 +2125,12 @@ function injectMultimodalMediaStyles() {
     }
 
     .dpp-mm-status[data-tone="error"] {
-      color: #b42318;
+      color: var(--dpp-ui-error, #b42318);
     }
 
     body.dpp-theme-dark .dpp-mm-button {
       background: rgba(48, 56, 82, 0.9);
-      color: #9fb2ff;
+      color: var(--dpp-ui-accent, #9fb2ff);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.26);
     }
 
@@ -2164,7 +2164,7 @@ function injectMultimodalMediaStyles() {
     }
 
     body.dpp-theme-dark .dpp-mm-status[data-tone="error"] {
-      color: #ffb4a8;
+      color: var(--dpp-ui-error, #ffb4a8);
     }
   `;
   document.head.appendChild(style);

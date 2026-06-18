@@ -1,48 +1,78 @@
 @import 'tailwindcss';
 
+/*
+  Editorial Terminal palette.
+  - Neutrals are cool-tinted toward blue (subconscious brand cohesion) but kept
+    restrained so they never read as "blue theme".
+  - Blue is the ONLY interaction accent: clickable / focus / active. It is
+    deliberately withheld from bubbles, dividers and decoration so it stays loud.
+  - All colors in oklch for perceptual uniformity and easy dark derivation.
+*/
 :root {
   color-scheme: light;
-  --ds-blue: #4D6BFE;
-  --ds-blue-hover: #3B5BEE;
-  --ds-blue-soft: #6E86FF;
-  --ds-blue-light: #EEF3FF;
-  --ds-blue-glow: rgba(77, 107, 254, 0.13);
-  --ds-blue-shadow: 0 5px 14px rgba(77, 107, 254, 0.22);
-  --ds-text-on-primary: #FFFFFF;
-  --ds-bg: #F5F8FF;
-  --ds-bg-rgb: 245, 248, 255;
-  --ds-shell-bg: #F3F7FF;
-  --ds-card: #FFFFFF;
-  --ds-surface: #F2F5FA;
-  --ds-surface-hover: #EBF0F8;
-  --ds-border: #DDE5F1;
-  --ds-border-hover: #C9D4E5;
-  --ds-text: #171A20;
-  --ds-text-secondary: #626B7A;
-  --ds-text-tertiary: #97A1B2;
-  --ds-shadow-sm: 0 1px 2px rgba(32, 45, 72, 0.04);
-  --ds-shadow-md: 0 8px 22px rgba(32, 45, 72, 0.07);
-  --ds-shadow-lg: 0 14px 42px rgba(32, 45, 72, 0.1);
-  --ds-danger: #EF4444;
-  --ds-danger-bg: #FEF2F2;
-  --ds-danger-bg-hover: #FEE2E2;
-  --ds-danger-border: #FECACA;
-  --ds-danger-border-hover: #FCA5A5;
-  --ds-success: #10B981;
-  --ds-success-bg: #ECFDF5;
-  --ds-success-border: #A7F3D0;
-  --ds-warning: #F59E0B;
-  --ds-warning-bg: #FFFBEB;
-  --ds-warning-border: #FDE68A;
-  --ds-info: #3B82F6;
-  --ds-info-bg: #EFF6FF;
-  --ds-info-border: #BFDBFE;
-  --ds-purple: #8B5CF6;
-  --ds-purple-bg: #F5F3FF;
-  --ds-purple-border: #DDD6FE;
-  --ds-selected-border: rgba(77, 107, 254, 0.24);
-  --ds-switch-thumb: #FFFFFF;
-  --ds-logo-gradient-end: #7C8FFF;
+
+  /* Ink scale — primary text → quiet */
+  --ds-text:          oklch(0.24 0.018 264);
+  --ds-text-secondary: oklch(0.52 0.020 264);
+  --ds-text-tertiary: oklch(0.70 0.015 264);
+  --ds-text-on-primary: oklch(0.99 0.002 264);
+
+  /* Paper scale — surfaces, kept tinted not white */
+  --ds-shell-bg: oklch(0.975 0.004 264);
+  --ds-bg:       oklch(0.985 0.004 264);
+  --ds-card:     oklch(0.998 0.002 264);
+  --ds-surface:  oklch(0.965 0.005 264);
+  --ds-surface-hover: oklch(0.95 0.006 264);
+  --ds-bg-rgb: 250, 251, 253;
+
+  /* Lines — the elevation system, not shadows */
+  --ds-border:       oklch(0.90 0.008 264);
+  --ds-border-hover: oklch(0.84 0.012 264);
+  --ds-selected-border: oklch(0.62 0.19 264 / 0.30);
+
+  /* Accent — blue, reserved for interaction only */
+  --ds-blue:        oklch(0.62 0.19 264);   /* ≈ #4D6BFE */
+  --ds-blue-hover:  oklch(0.56 0.20 266);   /* ≈ #3B5BEE */
+  --ds-blue-soft:   oklch(0.68 0.17 264);
+  --ds-blue-light:  oklch(0.96 0.025 264);  /* pale wash for tinted panels */
+  --ds-blue-glow:   oklch(0.62 0.19 264 / 0.14);
+  --ds-blue-shadow: 0 1px 2px oklch(0.30 0.12 264 / 0.18);
+
+  /* Elevation — border + inset highlight instead of timid drop shadows.
+     Works in both themes, so dark mode finally gets depth. */
+  --ds-elevate-1: 0 0 0 1px var(--ds-border), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --ds-elevate-2: 0 0 0 1px var(--ds-border), 0 1px 2px oklch(0.25 0.02 264 / 0.05), inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --ds-shadow-sm: var(--ds-elevate-1);
+  --ds-shadow-md: var(--ds-elevate-2);
+  --ds-shadow-lg: 0 0 0 1px var(--ds-border), 0 8px 24px oklch(0.25 0.04 264 / 0.10), inset 0 1px 0 oklch(1 0 0 / 0.07);
+
+  --ds-switch-thumb: oklch(0.998 0.002 264);
+  --ds-logo-gradient-end: oklch(0.72 0.13 264);
+
+  /* Shape language — mixed radii build hierarchy instead of uniform softness */
+  --radius-card: 0px;            /* editorial: cards are flat planes */
+  --radius-ctrl: 6px;            /* buttons / inputs get a crisp micro-radius */
+  --radius-pill: 999px;          /* tags / badges stay capsules */
+
+  /* Semantic colors */
+  --ds-danger:            oklch(0.64 0.22 25);
+  --ds-danger-bg:         oklch(0.96 0.03 25);
+  --ds-danger-bg-hover:   oklch(0.93 0.05 25);
+  --ds-danger-border:     oklch(0.88 0.06 25);
+  --ds-danger-border-hover: oklch(0.82 0.09 25);
+  --ds-success:           oklch(0.70 0.15 162);
+  --ds-success-bg:        oklch(0.96 0.03 162);
+  --ds-success-border:    oklch(0.88 0.07 162);
+  --ds-warning:           oklch(0.75 0.15 75);
+  --ds-warning-bg:        oklch(0.97 0.03 75);
+  --ds-warning-border:    oklch(0.90 0.06 75);
+  --ds-info:              oklch(0.62 0.17 250);
+  --ds-info-bg:           oklch(0.96 0.03 250);
+  --ds-info-border:       oklch(0.88 0.05 250);
+  --ds-purple:            oklch(0.62 0.18 300);
+  --ds-purple-bg:         oklch(0.96 0.03 300);
+  --ds-purple-border:     oklch(0.88 0.05 300);
+
   --ds-type-user: var(--ds-info);
   --ds-type-user-bg: var(--ds-info-bg);
   --ds-type-user-border: var(--ds-info-border);
@@ -57,99 +87,117 @@
   --ds-type-reference-border: var(--ds-success-border);
 }
 
+/* Dark theme — defined once, applied by both explicit override and system. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ds-text:          oklch(0.93 0.012 264);
+  --ds-text-secondary: oklch(0.76 0.015 264);
+  --ds-text-tertiary: oklch(0.60 0.015 264);
+  --ds-text-on-primary: oklch(0.18 0.02 264);
+
+  --ds-shell-bg: oklch(0.17 0.012 264);
+  --ds-bg:       oklch(0.19 0.012 264);
+  --ds-card:     oklch(0.22 0.014 264);
+  --ds-surface:  oklch(0.25 0.014 264);
+  --ds-surface-hover: oklch(0.29 0.015 264);
+  --ds-bg-rgb: 36, 38, 46;
+
+  --ds-border:       oklch(0.32 0.014 264);
+  --ds-border-hover: oklch(0.40 0.016 264);
+  --ds-selected-border: oklch(0.75 0.13 264 / 0.42);
+
+  --ds-blue:        oklch(0.75 0.14 264);
+  --ds-blue-hover:  oklch(0.82 0.12 264);
+  --ds-blue-soft:   oklch(0.80 0.11 264);
+  --ds-blue-light:  oklch(0.30 0.06 264 / 0.55);
+  --ds-blue-glow:   oklch(0.75 0.14 264 / 0.24);
+  --ds-blue-shadow: 0 1px 2px oklch(0.15 0.05 264 / 0.5);
+
+  /* Dark elevation: brighter top-line + inner shadow = real depth without glow */
+  --ds-elevate-1: 0 0 0 1px var(--ds-border), inset 0 1px 0 oklch(1 0 0 / 0.04);
+  --ds-elevate-2: 0 0 0 1px var(--ds-border), 0 1px 3px oklch(0.05 0.01 264 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --ds-shadow-sm: var(--ds-elevate-1);
+  --ds-shadow-md: var(--ds-elevate-2);
+  --ds-shadow-lg: 0 0 0 1px var(--ds-border), 0 12px 32px oklch(0.02 0.01 264 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.06);
+
+  --ds-switch-thumb: oklch(0.998 0.002 264);
+  --ds-logo-gradient-end: oklch(0.78 0.12 264);
+
+  --ds-danger:            oklch(0.72 0.18 25);
+  --ds-danger-bg:         oklch(0.30 0.06 25 / 0.5);
+  --ds-danger-bg-hover:   oklch(0.34 0.08 25 / 0.6);
+  --ds-danger-border:     oklch(0.55 0.12 25 / 0.5);
+  --ds-danger-border-hover: oklch(0.62 0.14 25 / 0.6);
+  --ds-success:           oklch(0.78 0.14 162);
+  --ds-success-bg:        oklch(0.32 0.05 162 / 0.45);
+  --ds-success-border:    oklch(0.55 0.10 162 / 0.5);
+  --ds-warning:           oklch(0.80 0.14 75);
+  --ds-warning-bg:        oklch(0.34 0.06 75 / 0.45);
+  --ds-warning-border:    oklch(0.58 0.10 75 / 0.5);
+  --ds-info:              oklch(0.75 0.13 250);
+  --ds-info-bg:           oklch(0.32 0.05 250 / 0.45);
+  --ds-info-border:       oklch(0.55 0.09 250 / 0.5);
+  --ds-purple:            oklch(0.74 0.14 300);
+  --ds-purple-bg:         oklch(0.33 0.05 300 / 0.45);
+  --ds-purple-border:     oklch(0.56 0.10 300 / 0.5);
+}
+
+/* System-dark fallback when no explicit override is set. Mirrors [data-theme='dark']. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --ds-blue: #7D91FF;
-    --ds-blue-hover: #91A2FF;
-    --ds-blue-light: rgba(125, 145, 255, 0.16);
-    --ds-blue-glow: rgba(125, 145, 255, 0.22);
-    --ds-blue-shadow: 0 1px 8px rgba(77, 107, 254, 0.28);
-    --ds-text-on-primary: #FFFFFF;
-    --ds-bg: #101217;
-    --ds-bg-rgb: 16, 18, 23;
-    --ds-shell-bg: #101217;
-    --ds-card: #151922;
-    --ds-surface: #1B202A;
-    --ds-surface-hover: #242A36;
-    --ds-border: #2B3240;
-    --ds-border-hover: #3B4556;
-    --ds-text: #E9EDF5;
-    --ds-text-secondary: #B5BDCB;
-    --ds-text-tertiary: #838C9D;
-    --ds-shadow-sm: none;
-    --ds-shadow-md: none;
-    --ds-shadow-lg: none;
-    --ds-danger: #FF7B7B;
-    --ds-danger-bg: rgba(239, 68, 68, 0.14);
-    --ds-danger-bg-hover: rgba(239, 68, 68, 0.2);
-    --ds-danger-border: rgba(255, 123, 123, 0.28);
-    --ds-danger-border-hover: rgba(255, 123, 123, 0.4);
-    --ds-success: #38D39F;
-    --ds-success-bg: rgba(16, 185, 129, 0.14);
-    --ds-success-border: rgba(56, 211, 159, 0.28);
-    --ds-warning: #F6B44B;
-    --ds-warning-bg: rgba(245, 158, 11, 0.14);
-    --ds-warning-border: rgba(246, 180, 75, 0.28);
-    --ds-info: #7DB0FF;
-    --ds-info-bg: rgba(59, 130, 246, 0.16);
-    --ds-info-border: rgba(125, 176, 255, 0.3);
-    --ds-purple: #B79BFF;
-    --ds-purple-bg: rgba(139, 92, 246, 0.16);
-    --ds-purple-border: rgba(183, 155, 255, 0.3);
-    --ds-selected-border: rgba(125, 145, 255, 0.36);
-    --ds-switch-thumb: #FFFFFF;
-    --ds-logo-gradient-end: #A7B4FF;
+    --ds-text:          oklch(0.93 0.012 264);
+    --ds-text-secondary: oklch(0.76 0.015 264);
+    --ds-text-tertiary: oklch(0.60 0.015 264);
+    --ds-text-on-primary: oklch(0.18 0.02 264);
+    --ds-shell-bg: oklch(0.17 0.012 264);
+    --ds-bg:       oklch(0.19 0.012 264);
+    --ds-card:     oklch(0.22 0.014 264);
+    --ds-surface:  oklch(0.25 0.014 264);
+    --ds-surface-hover: oklch(0.29 0.015 264);
+    --ds-bg-rgb: 36, 38, 46;
+    --ds-border:       oklch(0.32 0.014 264);
+    --ds-border-hover: oklch(0.40 0.016 264);
+    --ds-selected-border: oklch(0.75 0.13 264 / 0.42);
+    --ds-blue:        oklch(0.75 0.14 264);
+    --ds-blue-hover:  oklch(0.82 0.12 264);
+    --ds-blue-soft:   oklch(0.80 0.11 264);
+    --ds-blue-light:  oklch(0.30 0.06 264 / 0.55);
+    --ds-blue-glow:   oklch(0.75 0.14 264 / 0.24);
+    --ds-blue-shadow: 0 1px 2px oklch(0.15 0.05 264 / 0.5);
+    --ds-elevate-1: 0 0 0 1px var(--ds-border), inset 0 1px 0 oklch(1 0 0 / 0.04);
+    --ds-elevate-2: 0 0 0 1px var(--ds-border), 0 1px 3px oklch(0.05 0.01 264 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.05);
+    --ds-shadow-sm: var(--ds-elevate-1);
+    --ds-shadow-md: var(--ds-elevate-2);
+    --ds-shadow-lg: 0 0 0 1px var(--ds-border), 0 12px 32px oklch(0.02 0.01 264 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.06);
+    --ds-switch-thumb: oklch(0.998 0.002 264);
+    --ds-logo-gradient-end: oklch(0.78 0.12 264);
+    --ds-danger:            oklch(0.72 0.18 25);
+    --ds-danger-bg:         oklch(0.30 0.06 25 / 0.5);
+    --ds-danger-bg-hover:   oklch(0.34 0.08 25 / 0.6);
+    --ds-danger-border:     oklch(0.55 0.12 25 / 0.5);
+    --ds-danger-border-hover: oklch(0.62 0.14 25 / 0.6);
+    --ds-success:           oklch(0.78 0.14 162);
+    --ds-success-bg:        oklch(0.32 0.05 162 / 0.45);
+    --ds-success-border:    oklch(0.55 0.10 162 / 0.5);
+    --ds-warning:           oklch(0.80 0.14 75);
+    --ds-warning-bg:        oklch(0.34 0.06 75 / 0.45);
+    --ds-warning-border:    oklch(0.58 0.10 75 / 0.5);
+    --ds-info:              oklch(0.75 0.13 250);
+    --ds-info-bg:           oklch(0.32 0.05 250 / 0.45);
+    --ds-info-border:       oklch(0.55 0.09 250 / 0.5);
+    --ds-purple:            oklch(0.74 0.14 300);
+    --ds-purple-bg:         oklch(0.33 0.05 300 / 0.45);
+    --ds-purple-border:     oklch(0.56 0.10 300 / 0.5);
   }
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --ds-blue: #7D91FF;
-  --ds-blue-hover: #91A2FF;
-  --ds-blue-light: rgba(125, 145, 255, 0.16);
-  --ds-blue-glow: rgba(125, 145, 255, 0.22);
-  --ds-blue-shadow: 0 1px 8px rgba(77, 107, 254, 0.28);
-  --ds-text-on-primary: #FFFFFF;
-  --ds-bg: #101217;
-  --ds-bg-rgb: 16, 18, 23;
-  --ds-shell-bg: #101217;
-  --ds-card: #151922;
-  --ds-surface: #1B202A;
-  --ds-surface-hover: #242A36;
-  --ds-border: #2B3240;
-  --ds-border-hover: #3B4556;
-  --ds-text: #E9EDF5;
-  --ds-text-secondary: #B5BDCB;
-  --ds-text-tertiary: #838C9D;
-  --ds-shadow-sm: none;
-  --ds-shadow-md: none;
-  --ds-shadow-lg: none;
-  --ds-danger: #FF7B7B;
-  --ds-danger-bg: rgba(239, 68, 68, 0.14);
-  --ds-danger-bg-hover: rgba(239, 68, 68, 0.2);
-  --ds-danger-border: rgba(255, 123, 123, 0.28);
-  --ds-danger-border-hover: rgba(255, 123, 123, 0.4);
-  --ds-success: #38D39F;
-  --ds-success-bg: rgba(16, 185, 129, 0.14);
-  --ds-success-border: rgba(56, 211, 159, 0.28);
-  --ds-warning: #F6B44B;
-  --ds-warning-bg: rgba(245, 158, 11, 0.14);
-  --ds-warning-border: rgba(246, 180, 75, 0.28);
-  --ds-info: #7DB0FF;
-  --ds-info-bg: rgba(59, 130, 246, 0.16);
-  --ds-info-border: rgba(125, 176, 255, 0.3);
-  --ds-purple: #B79BFF;
-  --ds-purple-bg: rgba(139, 92, 246, 0.16);
-  --ds-purple-border: rgba(183, 155, 255, 0.3);
-  --ds-selected-border: rgba(125, 145, 255, 0.36);
-  --ds-switch-thumb: #FFFFFF;
-  --ds-logo-gradient-end: #A7B4FF;
 }
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-variant-numeric: tabular-nums;
   background: var(--ds-shell-bg);
   color: var(--ds-text);
   min-width: 320px;
@@ -194,6 +242,25 @@ body {
 
 .animate-slide-down {
   animation: slideDown 0.25s ease-out;
+}
+
+/* Reduced-motion: kill every decorative animation so the UI is still fully
+   usable without movement. State changes still apply instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-down,
+  .ds-whats-new-popover,
+  .ds-modal-overlay,
+  .ds-modal-card {
+    animation: none !important;
+  }
+  .ds-chat-caret {
+    animation: none !important;
+    opacity: 0.8;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 input:focus, textarea:focus {
@@ -265,7 +332,8 @@ input[type='range'] {
   color: var(--ds-blue);
   background: var(--ds-blue-light);
   font-size: 10px;
-  font-weight: 680;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   line-height: 1;
 }
 
@@ -319,17 +387,20 @@ input[type='range'] {
   border-radius: 8px;
   color: var(--ds-text-on-primary);
   background: var(--ds-blue);
-  box-shadow: var(--ds-blue-shadow);
+  box-shadow: var(--ds-shadow-sm);
   font: inherit;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
 .ds-whats-new-dismiss:hover {
   background: var(--ds-blue-hover);
-  transform: translateY(-1px);
+}
+
+.ds-whats-new-dismiss:active {
+  transform: translateY(0);
 }
 
 /* Top tabs */
@@ -345,9 +416,7 @@ input[type='range'] {
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   border-bottom: 1px solid var(--ds-border);
-  background: color-mix(in srgb, var(--ds-card) 76%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: var(--ds-card);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -372,7 +441,7 @@ input[type='range'] {
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  font-weight: 560;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -402,12 +471,11 @@ input[type='range'] {
 .side-tab-indicator {
   position: absolute;
   right: 10px;
-  bottom: 0;
+  bottom: -1px;
   left: 10px;
-  height: 3px;
-  border-radius: 999px;
+  height: 2px;
+  border-radius: 0;
   background: var(--ds-blue);
-  box-shadow: 0 -2px 9px var(--ds-blue-glow);
 }
 
 @media (min-width: 520px) {
@@ -448,17 +516,17 @@ input[type='range'] {
   }
 }
 
-/* Card */
+/* Card — flat editorial plane; depth comes from the line, not a shadow */
 .ds-card {
   background: var(--ds-card);
   border: 1px solid var(--ds-border);
+  border-radius: var(--radius-card);
   box-shadow: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .ds-card:hover {
   border-color: var(--ds-border-hover);
-  background: color-mix(in srgb, var(--ds-card) 92%, var(--ds-blue-light));
-  box-shadow: var(--ds-shadow-sm);
+  background: color-mix(in srgb, var(--ds-card) 94%, var(--ds-surface));
 }
 
 /* Form container */
@@ -479,6 +547,7 @@ input[type='range'] {
 .ds-surface-panel {
   background: color-mix(in srgb, var(--ds-card) 88%, var(--ds-bg));
   border: 1px solid var(--ds-border);
+  border-radius: var(--radius-card);
   box-shadow: none;
 }
 
@@ -486,7 +555,7 @@ input[type='range'] {
 .ds-btn-primary {
   background: var(--ds-blue);
   color: var(--ds-text-on-primary);
-  box-shadow: var(--ds-blue-shadow);
+  box-shadow: var(--ds-shadow-sm);
   border: 1px solid var(--ds-blue);
 }
 .ds-btn-primary:hover {
@@ -598,30 +667,32 @@ input[type='range'] {
   border: 1px solid var(--ds-selected-border);
 }
 
-/* Page intro */
+/* Page intro — editorial masthead: generous breathing room + bottom rule */
 .ds-page-intro {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 0 2px;
+  padding: 6px 0 16px;
+  border-bottom: 1px solid var(--ds-border);
+  margin-bottom: 18px;
 }
 
 .ds-page-intro-title {
   margin: 0;
   color: var(--ds-text);
-  font-size: 16px;
-  font-weight: 680;
-  letter-spacing: 0;
-  line-height: 1.25;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
 }
 
 .ds-page-intro-description {
-  margin: 7px 0 0;
+  margin: 8px 0 0;
   max-width: 34rem;
   color: var(--ds-text-secondary);
   font-size: 12px;
-  line-height: 1.58;
+  line-height: 1.6;
 }
 
 .ds-page-intro-meta {
@@ -643,28 +714,33 @@ input[type='range'] {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 10px;
   min-height: 280px;
-  padding: 42px 24px;
+  padding: 48px 24px;
   text-align: center;
 }
 
+/* Drop the templated rounded-icon-in-a-box. The icon container is now a thin
+   monospace glyph chip — restrained, not decorative — so it reads as a quiet
+   prompt marker instead of a stock empty-state illustration. */
 .ds-empty-state-icon {
   display: flex;
-  width: 52px;
-  height: 52px;
+  width: auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
   align-items: center;
   justify-content: center;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--ds-card) 68%, var(--ds-surface));
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: transparent;
   color: var(--ds-text-tertiary);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.85) inset;
 }
 
 .ds-empty-state-title {
   color: var(--ds-text);
   font-size: 14px;
-  font-weight: 560;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -783,7 +859,7 @@ input[type='range'] {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--ds-border);
-  border-radius: 10px;
+  border-radius: var(--radius-ctrl);
   background: var(--ds-surface);
   color: var(--ds-text-secondary);
   cursor: pointer;
@@ -805,7 +881,7 @@ input[type='range'] {
   height: 30px;
   align-items: center;
   border: 1px solid var(--ds-border);
-  border-radius: 10px;
+  border-radius: var(--radius-ctrl);
   background: var(--ds-surface);
   color: var(--ds-text-secondary);
   cursor: pointer;
@@ -932,11 +1008,12 @@ input[type='range'] {
 
 .ds-chat-message-user {
   max-width: min(86%, 420px);
-  border-radius: 16px 16px 5px 16px;
-  background: var(--ds-blue);
-  color: var(--ds-text-on-primary);
+  border-radius: 2px 14px 14px 14px;
+  background: var(--ds-surface);
+  color: var(--ds-text);
   padding: 8px 12px;
-  box-shadow: var(--ds-blue-shadow);
+  box-shadow: var(--ds-shadow-sm);
+  border: 1px solid var(--ds-border);
 }
 
 .ds-chat-message-assistant {
@@ -999,7 +1076,8 @@ input[type='range'] {
 
 .ds-chat-error {
   margin: 10px auto 0;
-  border-radius: 10px;
+  border: 1px solid var(--ds-danger-border);
+  border-radius: var(--radius-ctrl);
   background: var(--ds-danger-bg);
   color: var(--ds-danger);
   font-size: 11px;
@@ -1016,7 +1094,7 @@ input[type='range'] {
 
 .ds-chat-composer {
   border: 1px solid var(--ds-border);
-  border-radius: 16px;
+  border-radius: var(--radius-ctrl);
   background: var(--ds-card);
   box-shadow: var(--ds-shadow-sm);
   padding: 8px;
@@ -1058,23 +1136,21 @@ input[type='range'] {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-ctrl);
   background: var(--ds-blue);
   color: var(--ds-text-on-primary);
   cursor: pointer;
-  box-shadow: var(--ds-blue-shadow);
-  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: var(--ds-shadow-sm);
+  transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
 .ds-chat-send-button:hover {
   background: var(--ds-blue-hover);
-  transform: translateY(-1px);
 }
 
 .ds-chat-send-button:disabled {
   cursor: default;
   opacity: 0.38;
-  transform: none;
 }
 
 .ds-chat-send-button svg {
@@ -1090,7 +1166,7 @@ input[type='range'] {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--ds-border);
-  border-radius: 999px;
+  border-radius: var(--radius-ctrl);
   background: var(--ds-surface);
   color: var(--ds-text-secondary);
   cursor: pointer;
@@ -1157,9 +1233,7 @@ input[type='range'] {
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   border-bottom: 1px solid var(--ds-border);
-  background: color-mix(in srgb, var(--ds-card) 82%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: var(--ds-card);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1183,7 +1257,7 @@ input[type='range'] {
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  font-weight: 560;
+  font-weight: 600;
   white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -1191,13 +1265,13 @@ input[type='range'] {
 .sub-tab::after {
   position: absolute;
   right: 10px;
-  bottom: 0;
+  bottom: -1px;
   left: 10px;
-  height: 3px;
-  border-radius: 999px;
+  height: 2px;
+  border-radius: 0;
   background: transparent;
   content: '';
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .sub-tab:hover {
@@ -1213,7 +1287,6 @@ input[type='range'] {
 
 .sub-tab-active::after {
   background: var(--ds-blue);
-  box-shadow: 0 -2px 9px var(--ds-blue-glow);
 }
 
 .ds-switch-thumb {
@@ -1241,8 +1314,9 @@ input[type='range'] {
   padding-left: 2px;
   color: var(--ds-text);
   font-size: 12px;
-  font-weight: 680;
-  letter-spacing: 0.01em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   line-height: 1.3;
 }
 
@@ -1273,7 +1347,8 @@ input[type='range'] {
   width: 100%;
   max-width: 360px;
   padding: 18px 18px 14px;
-  border-radius: 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
   background: var(--ds-card);
   box-shadow: var(--ds-shadow-lg);
   animation: ds-modal-pop 0.16s ease-out;
@@ -1283,7 +1358,7 @@ input[type='range'] {
   margin: 0;
   color: var(--ds-text);
   font-size: 14px;
-  font-weight: 680;
+  font-weight: 700;
   line-height: 1.3;
 }
 

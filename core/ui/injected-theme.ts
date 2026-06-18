@@ -5,69 +5,79 @@ export function injectInjectedThemeStyles(): void {
 
   const style = document.createElement('style');
   style.id = STYLE_ID;
+  // Injected UI shares the same cool-ink palette as the sidepanel (--ds-*) so the
+  // tool cards / inline agent / skill popup feel like one product with the panel,
+  // not a neutral-gray bolt-on. Accent is the same interaction blue, kept
+  // disciplined: surface/depth comes from borders + inset highlights, not glow.
   style.textContent = `
 body {
-  --dpp-ui-surface: #FFFFFF;
-  --dpp-ui-surface-muted: #F7F8FA;
-  --dpp-ui-surface-hover: #EFF1F4;
-  --dpp-ui-text: #1D1D1F;
-  --dpp-ui-text-muted: #6B7280;
-  --dpp-ui-text-subtle: #9CA3AF;
-  --dpp-ui-border: #E5E7EB;
-  --dpp-ui-border-muted: #EEF0F2;
-  --dpp-ui-accent: #4D6BFE;
-  --dpp-ui-accent-strong: #3151D3;
-  --dpp-ui-accent-soft: #EEF1FF;
-  --dpp-ui-accent-panel: rgba(77, 107, 254, 0.06);
-  --dpp-ui-code-bg: rgba(15, 23, 42, 0.06);
-  --dpp-ui-danger-panel: rgba(239, 68, 68, 0.08);
-  --dpp-ui-success: #10B981;
-  --dpp-ui-error: #EF4444;
-  --dpp-ui-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --dpp-ui-panel-shadow: -14px 0 40px rgba(15, 23, 42, 0.14);
+  --dpp-ui-surface:      oklch(0.998 0.002 264);
+  --dpp-ui-surface-muted: oklch(0.965 0.005 264);
+  --dpp-ui-surface-hover: oklch(0.95 0.006 264);
+  --dpp-ui-text:         oklch(0.24 0.018 264);
+  --dpp-ui-text-muted:   oklch(0.52 0.020 264);
+  --dpp-ui-text-subtle:  oklch(0.70 0.015 264);
+  --dpp-ui-border:       oklch(0.90 0.008 264);
+  --dpp-ui-border-muted: oklch(0.94 0.006 264);
+  --dpp-ui-accent:       oklch(0.62 0.19 264);
+  --dpp-ui-accent-strong: oklch(0.56 0.20 266);
+  --dpp-ui-accent-soft:  oklch(0.96 0.025 264);
+  --dpp-ui-accent-panel: oklch(0.62 0.19 264 / 0.06);
+  --dpp-ui-code-bg:      oklch(0.30 0.02 264 / 0.06);
+  --dpp-ui-danger:       oklch(0.64 0.22 25);
+  --dpp-ui-danger-panel: oklch(0.64 0.22 25 / 0.08);
+  --dpp-ui-success:      oklch(0.70 0.15 162);
+  --dpp-ui-warning:      oklch(0.75 0.15 75);
+  --dpp-ui-error:        oklch(0.64 0.22 25);
+  --dpp-ui-shadow:       0 0 0 1px var(--dpp-ui-border), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --dpp-ui-panel-shadow: -14px 0 40px oklch(0.25 0.04 264 / 0.14);
 }
 
 body.dpp-theme-dark {
-  --dpp-ui-surface: #1F1F1F;
-  --dpp-ui-surface-muted: #262626;
-  --dpp-ui-surface-hover: #2E2E2E;
-  --dpp-ui-text: #F5F5F5;
-  --dpp-ui-text-muted: #D4D4D8;
-  --dpp-ui-text-subtle: #AEB4BC;
-  --dpp-ui-border: #3A3A3A;
-  --dpp-ui-border-muted: #2E2E2E;
-  --dpp-ui-accent: #A8B5FF;
-  --dpp-ui-accent-strong: #C4CCFF;
-  --dpp-ui-accent-soft: rgba(124, 145, 255, 0.18);
-  --dpp-ui-accent-panel: rgba(125, 150, 255, 0.12);
-  --dpp-ui-code-bg: rgba(255, 255, 255, 0.08);
-  --dpp-ui-danger-panel: rgba(248, 113, 113, 0.14);
-  --dpp-ui-success: #34D399;
-  --dpp-ui-error: #F87171;
-  --dpp-ui-shadow: none;
-  --dpp-ui-panel-shadow: -14px 0 40px rgba(0, 0, 0, 0.32);
+  --dpp-ui-surface:      oklch(0.22 0.014 264);
+  --dpp-ui-surface-muted: oklch(0.25 0.014 264);
+  --dpp-ui-surface-hover: oklch(0.29 0.015 264);
+  --dpp-ui-text:         oklch(0.93 0.012 264);
+  --dpp-ui-text-muted:   oklch(0.76 0.015 264);
+  --dpp-ui-text-subtle:  oklch(0.60 0.015 264);
+  --dpp-ui-border:       oklch(0.32 0.014 264);
+  --dpp-ui-border-muted: oklch(0.28 0.014 264);
+  --dpp-ui-accent:       oklch(0.75 0.14 264);
+  --dpp-ui-accent-strong: oklch(0.82 0.12 264);
+  --dpp-ui-accent-soft:  oklch(0.30 0.06 264 / 0.55);
+  --dpp-ui-accent-panel: oklch(0.75 0.14 264 / 0.12);
+  --dpp-ui-code-bg:      oklch(1 0 0 / 0.08);
+  --dpp-ui-danger:       oklch(0.72 0.18 25);
+  --dpp-ui-danger-panel: oklch(0.30 0.06 25 / 0.22);
+  --dpp-ui-success:      oklch(0.78 0.14 162);
+  --dpp-ui-warning:      oklch(0.80 0.14 75);
+  --dpp-ui-error:        oklch(0.72 0.18 25);
+  --dpp-ui-shadow:       0 0 0 1px var(--dpp-ui-border), inset 0 1px 0 oklch(1 0 0 / 0.04);
+  --dpp-ui-panel-shadow: -14px 0 40px oklch(0.02 0.01 264 / 0.5);
 }
 
 @media (prefers-color-scheme: dark) {
   body:not(.dpp-theme-light) {
-    --dpp-ui-surface: #1F1F1F;
-    --dpp-ui-surface-muted: #262626;
-    --dpp-ui-surface-hover: #2E2E2E;
-    --dpp-ui-text: #F5F5F5;
-    --dpp-ui-text-muted: #D4D4D8;
-    --dpp-ui-text-subtle: #AEB4BC;
-    --dpp-ui-border: #3A3A3A;
-    --dpp-ui-border-muted: #2E2E2E;
-    --dpp-ui-accent: #A8B5FF;
-    --dpp-ui-accent-strong: #C4CCFF;
-    --dpp-ui-accent-soft: rgba(124, 145, 255, 0.18);
-    --dpp-ui-accent-panel: rgba(125, 150, 255, 0.12);
-    --dpp-ui-code-bg: rgba(255, 255, 255, 0.08);
-    --dpp-ui-danger-panel: rgba(248, 113, 113, 0.14);
-    --dpp-ui-success: #34D399;
-    --dpp-ui-error: #F87171;
-    --dpp-ui-shadow: none;
-    --dpp-ui-panel-shadow: -14px 0 40px rgba(0, 0, 0, 0.32);
+    --dpp-ui-surface:      oklch(0.22 0.014 264);
+    --dpp-ui-surface-muted: oklch(0.25 0.014 264);
+    --dpp-ui-surface-hover: oklch(0.29 0.015 264);
+    --dpp-ui-text:         oklch(0.93 0.012 264);
+    --dpp-ui-text-muted:   oklch(0.76 0.015 264);
+    --dpp-ui-text-subtle:  oklch(0.60 0.015 264);
+    --dpp-ui-border:       oklch(0.32 0.014 264);
+    --dpp-ui-border-muted: oklch(0.28 0.014 264);
+    --dpp-ui-accent:       oklch(0.75 0.14 264);
+    --dpp-ui-accent-strong: oklch(0.82 0.12 264);
+    --dpp-ui-accent-soft:  oklch(0.30 0.06 264 / 0.55);
+    --dpp-ui-accent-panel: oklch(0.75 0.14 264 / 0.12);
+    --dpp-ui-code-bg:      oklch(1 0 0 / 0.08);
+    --dpp-ui-danger:       oklch(0.72 0.18 25);
+    --dpp-ui-danger-panel: oklch(0.30 0.06 25 / 0.22);
+    --dpp-ui-success:      oklch(0.78 0.14 162);
+    --dpp-ui-warning:      oklch(0.80 0.14 75);
+    --dpp-ui-error:        oklch(0.72 0.18 25);
+    --dpp-ui-shadow:       0 0 0 1px var(--dpp-ui-border), inset 0 1px 0 oklch(1 0 0 / 0.04);
+    --dpp-ui-panel-shadow: -14px 0 40px oklch(0.02 0.01 264 / 0.5);
   }
 }
 `;

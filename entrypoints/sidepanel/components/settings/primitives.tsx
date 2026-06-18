@@ -25,7 +25,7 @@ export function SettingsSection({
           <p className="ds-settings-section-description">{description}</p>
         )}
       </div>
-      <div className="ds-surface-panel rounded-xl p-4 space-y-3">{children}</div>
+      <div className="ds-surface-panel p-4 space-y-3">{children}</div>
     </section>
   );
 }
@@ -123,12 +123,13 @@ export function Slider({
 }
 
 const inputClass =
-  'w-full px-3 py-2 text-xs rounded-lg border outline-none transition-colors focus:border-[var(--ds-blue)]';
+  'w-full px-3 py-2 text-xs border outline-none transition-colors focus:border-[var(--ds-blue)]';
 
 const inputStyle = {
   background: 'var(--ds-bg)',
   borderColor: 'var(--ds-border)',
   color: 'var(--ds-text)',
+  borderRadius: 'var(--radius-ctrl)',
 };
 
 export function TextField({
@@ -202,8 +203,8 @@ export function StatusMessage({
   }[tone];
   return (
     <div
-      className="text-[11px] px-3 py-2 rounded-lg flex items-start gap-2"
-      style={{ color: palette.color, background: palette.bg, border: '1px solid var(--ds-border)' }}
+      className="text-[11px] px-3 py-2 flex items-start gap-2"
+      style={{ color: palette.color, background: palette.bg, border: '1px solid var(--ds-border)', borderRadius: 'var(--radius-ctrl)' }}
     >
       <div className="flex-1 min-w-0">{children}</div>
       {onDismiss && (
@@ -232,10 +233,11 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className="shrink-0 text-[10px] px-2 py-0.5 rounded-full"
+      className="shrink-0 text-[10px] px-2 py-0.5 uppercase tracking-wide font-medium"
       style={{
         color: configured ? 'var(--ds-success)' : 'var(--ds-text-tertiary)',
         background: configured ? 'var(--ds-success-bg)' : 'var(--ds-surface)',
+        borderRadius: 'var(--radius-ctrl)',
       }}
     >
       {configured ? configuredLabel : notConfiguredLabel}
@@ -330,10 +332,10 @@ function ConfirmDialog({
         </h3>
         <p className="ds-modal-message">{message}</p>
         <div className="ds-modal-actions">
-          <button type="button" className="ds-btn-cancel px-3 py-2 text-[11px] font-medium rounded-lg" onClick={onCancel}>
+          <button type="button" className="ds-btn-cancel px-3 py-2 text-[11px] font-medium" style={{ borderRadius: 'var(--radius-ctrl)' }} onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button type="button" className="ds-btn-danger px-3 py-2 text-[11px] font-medium rounded-lg" onClick={onConfirm} autoFocus>
+          <button type="button" className="ds-btn-danger px-3 py-2 text-[11px] font-medium" style={{ borderRadius: 'var(--radius-ctrl)' }} onClick={onConfirm} autoFocus>
             {confirmLabel}
           </button>
         </div>
@@ -420,11 +422,12 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.key)}
-            className={`${padding} font-medium rounded-lg border transition-all duration-150`}
+            className={`${padding} font-medium border transition-colors duration-150`}
             style={{
-              background: active ? 'var(--ds-blue-light)' : 'var(--ds-bg)',
-              color: active ? 'var(--ds-blue)' : 'var(--ds-text-secondary)',
-              borderColor: active ? 'var(--ds-selected-border)' : 'var(--ds-border)',
+              borderRadius: 'var(--radius-ctrl)',
+              background: active ? 'var(--ds-blue)' : 'transparent',
+              color: active ? 'var(--ds-text-on-primary)' : 'var(--ds-text-secondary)',
+              borderColor: active ? 'var(--ds-blue)' : 'var(--ds-border)',
             }}
           >
             {option.label}
@@ -485,7 +488,7 @@ export function SkeletonList({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="ds-surface-panel rounded-lg p-3 space-y-2">
+        <div key={i} className="ds-surface-panel p-3 space-y-2">
           <Skeleton className="h-3" width="60%" />
           <Skeleton className="h-2.5" width="85%" />
         </div>
@@ -497,9 +500,9 @@ export function SkeletonList({ rows = 3 }: { rows?: number }) {
 /** Metric cell — a labeled value tile. Promoted from 4 duplicated definitions. */
 export function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--ds-bg)', border: '1px solid var(--ds-border)' }}>
-      <div className="text-[10px]" style={{ color: 'var(--ds-text-tertiary)' }}>{label}</div>
-      <div className="mt-0.5 truncate text-[11px]" style={{ color: 'var(--ds-text)' }}>{value}</div>
+    <div className="px-3 py-2" style={{ background: 'var(--ds-bg)', border: '1px solid var(--ds-border)' }}>
+      <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--ds-text-tertiary)' }}>{label}</div>
+      <div className="mt-0.5 truncate text-[12px] font-mono" style={{ color: 'var(--ds-text)' }}>{value}</div>
     </div>
   );
 }

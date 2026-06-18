@@ -576,7 +576,7 @@ function ensureResultStyles(): void {
 }
 .dpp-artifact-preview-error {
   padding: 16px;
-  color: #B42318;
+  color: var(--dpp-ui-error);
   font-size: 12px;
 }
 .dpp-result-code,

@@ -20,8 +20,8 @@ export function injectInlineAgentStyles(): void {
   style.textContent = `
     .dpp-agent-container {
       margin-top: 12px;
-      border-left: 3px solid var(--dpp-ui-accent);
       padding-left: 12px;
+      border-left: 1px solid var(--dpp-ui-border);
     }
     [data-dpp-agent-host-hidden] > :not(.dpp-agent-container):not(.dpp-tool-block) {
       display: none !important;
@@ -32,7 +32,7 @@ export function injectInlineAgentStyles(): void {
     .dpp-agent-step {
       margin-bottom: 8px;
       border: 1px solid var(--dpp-ui-border);
-      border-radius: 8px;
+      border-radius: 6px;
       overflow: hidden;
       background: var(--dpp-ui-surface);
       color: var(--dpp-ui-text);
@@ -41,10 +41,10 @@ export function injectInlineAgentStyles(): void {
       border-color: var(--dpp-ui-accent);
     }
     .dpp-agent-step[data-status="executing_tools"] {
-      border-color: #f59e0b;
+      border-color: var(--dpp-ui-warning);
     }
     .dpp-agent-step[data-status="error"] {
-      border-color: #ef4444;
+      border-color: var(--dpp-ui-error);
     }
     .dpp-agent-step-header {
       display: flex;
@@ -76,14 +76,14 @@ export function injectInlineAgentStyles(): void {
     .dpp-agent-stop-btn {
       padding: 2px 8px;
       font-size: 11px;
-      border: 1px solid #ef4444;
+      border: 1px solid var(--dpp-ui-error);
       border-radius: 4px;
       background: transparent;
-      color: #ef4444;
+      color: var(--dpp-ui-error);
       cursor: pointer;
     }
     .dpp-agent-stop-btn:hover {
-      background: #fef2f2;
+      background: var(--dpp-ui-danger-panel);
     }
     .dpp-agent-step-body {
       padding: 8px 10px;
@@ -182,11 +182,11 @@ export function injectInlineAgentStyles(): void {
     }
     .dpp-agent-step-tool-item.ok::before {
       content: '\\2713 ';
-      color: #10b981;
+      color: var(--dpp-ui-success);
     }
     .dpp-agent-step-tool-item.err::before {
       content: '\\2717 ';
-      color: #ef4444;
+      color: var(--dpp-ui-error);
     }
     .dpp-agent-footer {
       margin-top: 8px;
@@ -196,15 +196,15 @@ export function injectInlineAgentStyles(): void {
     }
     .dpp-agent-footer.complete::before {
       content: '\\25A0 ';
-      color: #10b981;
+      color: var(--dpp-ui-success);
     }
     .dpp-agent-footer.error::before {
       content: '\\25A0 ';
-      color: #ef4444;
+      color: var(--dpp-ui-error);
     }
 
     body.dpp-theme-dark .dpp-agent-stop-btn:hover {
-      background: #1f1f2e;
+      background: var(--dpp-ui-danger-panel);
     }
     [data-dpp-body-text] {
       font-size: inherit;
