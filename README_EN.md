@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek browser extension for a bilingual AI agent workspace with memory, projects, Skills, MCP tools, browser control, saved snippets, artifact downloads, conversation export, and automation.</strong>
+  <strong>DeepSeek browser extension for a bilingual AI agent workspace with memory, projects, Skills, MCP tools, multimodal media, browser control, saved snippets, artifact downloads, conversation export, and automation.</strong>
 </p>
 
 <p align="center">
@@ -29,12 +29,12 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#075-release-highlights">0.7.5 Highlights</a>
+  <a href="#100-release-highlights">1.0.0 Highlights</a>
 </p>
 
 ## Product Positioning
 
-DeepSeek++ is an open-source browser extension for [DeepSeek Web](https://chat.deepseek.com), with support for Chrome, Edge, and Firefox. It turns DeepSeek Web into an AI agent workspace where users can run English or Simplified Chinese UI, MCP tools, long-term memory, Skills, system prompt presets, web search, web fetch, conversation export, and scheduled automation in the same browser workflow.
+DeepSeek++ is an open-source browser extension for [DeepSeek Web](https://chat.deepseek.com), with support for Chrome, Edge, and Firefox. It turns DeepSeek Web into an AI agent workspace where users can run English or Simplified Chinese UI, MCP tools, image/video multimodal analysis, long-term memory, Skills, system prompt presets, web search, web fetch, conversation export, and scheduled automation in the same browser workflow.
 
 In plain terms, it is a DeepSeek Chrome extension, DeepSeek MCP tools extension, DeepSeek memory plugin, DeepSeek conversation export tool, and AI agent browser extension for DeepSeek Web.
 
@@ -46,7 +46,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [0.7.5 Release Highlights](#075-release-highlights)
+- [1.0.0 Release Highlights](#100-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -58,6 +58,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 | DeepSeek browser extension / DeepSeek Chrome extension | Adds side-panel chat, right-click text sending, tool-result rendering, and Chrome / Edge / Firefox support for DeepSeek Web. |
 | Multilingual DeepSeek extension | Switches between English and Simplified Chinese, keeping UI, built-in tool descriptions, and model continuation behavior in the same language. |
 | DeepSeek MCP tools | Lets you manage MCP services, tool permissions, and execution status in the side panel, then sends tool results back into the same conversation. |
+| DeepSeek multimodal media | After installing the Multimodal Native Host, attach images or videos in the DeepSeek input box so DeepSeek++ can analyze the media first and continue the conversation with the results. |
 | DeepSeek browser control | Lets DeepSeek++ operate a user-selected browser tab after the user enables the feature and chooses the target. |
 | DeepSeek memory | Automatically saves, filters, and injects long-term memory so different conversations can reuse user preferences, project context, and common facts. |
 | DeepSeek Skills / `/skill` workflows | Switches quickly between built-in, custom, and GitHub-imported Skills for expert modes and task templates. |
@@ -74,6 +75,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - Turn DeepSeek Web into an AI agent workspace with tool execution, MCP, memory, and automation.
 - Use DeepSeek++ in an English or Simplified Chinese workflow with matching UI, tool guidance, and model continuation prompts.
 - Use DeepSeek side-panel chat, selected-text actions, and reusable prompt scenarios directly in Chrome, Edge, or Firefox.
+- Add images or videos to a DeepSeek conversation so the model can continue explanations, summaries, comparisons, or document tasks from the media analysis.
 - Let AI work in a user-selected Chrome or Edge tab while keeping explicit enable, target switching, and detach controls.
 - Save project context, personal preferences, common workflows, and document-processing routines as long-term memory and reusable Skills.
 - Back up your own DeepSeek conversation history locally as readable files for archive, migration, or later search.
@@ -197,6 +199,8 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - **Results return automatically** - Tool results return to the same conversation so the model can keep generating.
 - **Agentic continuation support** - MCP tool results can feed back into the original conversation, supporting multi-step long-running tasks.
 - **Built-in multimodal preset** - Create the `Multimodal` preset so DeepSeek can analyze multiple images through OpenAI and videos through Gemini.
+- **Input-box media attachments** - After the Multimodal preset is installed and enabled, add images or videos from the DeepSeek input box and continue the message with the analysis results.
+- **User-controlled boundary** - OpenAI / Gemini keys, models, and request URLs are configured by the user in Settings. Media files enter multimodal analysis only when the user attaches and sends them.
 - **Local security** - MCP configuration and secrets stay in browser-local storage. WebDAV sync does not sync sensitive data.
 
 <p align="center">
@@ -291,7 +295,24 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="Automation task side panel">
 </p>
 
-## 0.7.5 Release Highlights
+## 1.0.0 Release Highlights
+
+1.0.0 matures DeepSeek++ as a multimodal browser workspace, bringing image/video analysis, MCP, local tools, and cleaner side-panel management into the same task flow.
+
+| Area | Main changes |
+|------|--------------|
+| Multimodal media | After installing the Multimodal Native Host, users can attach images or videos in the DeepSeek input box, analyze them through user-configured OpenAI / Gemini settings, and continue the current message with those results. |
+| Multimodal setup | Adds side-panel Multimodal API settings for OpenAI / Gemini keys, models, and request URLs, plus MCP-page creation, testing, and enablement for the `Multimodal` preset. |
+| Media-task reliability | Multimodal requests now expand their wait time according to image and video count, reducing premature interruption for larger or multi-file analysis. |
+| Artifact display | Generated artifact results render outside the collapsed tool block so the main answer and downloadable output are easier to distinguish and inspect. |
+| Side-panel organization | Settings are split into General, API, Appearance, Data, Prompt, Voice, and About subpages, while MCP, Tools, Skills, and Automation pages get clearer loading and confirmation states. |
+| UI consistency | Tool cards, the Skill popup, injected styling, and side-panel controls continue to align visual density, state feedback, and accessibility. |
+| Regression coverage | Adds tests for multimodal media, Native Host environment wiring, MCP collapsed state, tool-block styling, side-panel navigation, and injected themes. |
+
+<details>
+<summary>Show 0.7.5 release highlights</summary>
+
+### 0.7.5 Release Highlights
 
 0.7.5 strengthens local Skill workflows and agent-output stability, making local Skill imports easier to review while reducing noisy restored history and redundant task finalization.
 
@@ -304,6 +325,8 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Inline agent finalization | Reuses an existing completion summary when available so inline agent tasks do not produce redundant final answers. |
 | Product assets | Refreshes README and store assets with current product screenshots covering side-panel, tool execution, automation, and project surfaces. |
 | Regression coverage | Adds tests for local Skill import, sync merging, Shell Host local preview, history cleanup, PoW, inline agent behavior, and injected styling. |
+
+</details>
 
 <details>
 <summary>Show 0.7.4 release highlights</summary>

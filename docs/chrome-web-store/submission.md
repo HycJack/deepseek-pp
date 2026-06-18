@@ -1,6 +1,6 @@
 # Chrome Web Store Submission Runbook
 
-Last updated: 2026-06-17
+Last updated: 2026-06-18
 
 This runbook covers the parts that can be prepared from the repository and the parts that must be confirmed in the Chrome Web Store Developer Dashboard.
 
@@ -14,7 +14,7 @@ Official references:
 
 ## Current Status
 
-- Chrome MV3 package exists at `dist/deepseek-plus-plus-0.7.5-chrome.zip`.
+- Chrome MV3 package exists at `dist/deepseek-plus-plus-1.0.0-chrome.zip`.
 - Package root contains `manifest.json`.
 - Package size is below the Chrome Web Store package limit.
 - Required icon exists at `public/icon/128.png`.
@@ -47,7 +47,7 @@ npm run zip:chrome
 Upload:
 
 ```text
-dist/deepseek-plus-plus-0.7.5-chrome.zip
+dist/deepseek-plus-plus-1.0.0-chrome.zip
 ```
 
 ## Store Listing Fields
@@ -72,7 +72,7 @@ Productivity
 ### Single Purpose
 
 ```text
-Enhance the DeepSeek web chat experience with English and Simplified Chinese UI, user-controlled memory, Skills, project context, saved snippets, prompt presets, MCP tool execution, browser control tools, local exports, downloadable artifacts, and scheduled automation inside chat.deepseek.com.
+Enhance the DeepSeek web chat experience with English and Simplified Chinese UI, user-controlled memory, Skills, project context, saved snippets, prompt presets, MCP tool execution, multimodal media analysis, browser control tools, local exports, downloadable artifacts, and scheduled automation inside chat.deepseek.com.
 ```
 
 ### Data Type Disclosures
@@ -86,8 +86,8 @@ Conservative selections for the Chrome Web Store privacy form:
 Rationale:
 
 - Website content: the extension runs on and reads/modifies the DeepSeek web chat UI to provide user-facing features.
-- Personal communications: DeepSeek chat prompts and responses may include user communications and are processed to inject memory, skills, tool results, and user-requested local conversation exports.
-- Authentication information: optional DeepSeek API Key, WebDAV credentials, MCP headers, and native/local tool settings may be stored when the user configures them.
+- Personal communications: DeepSeek chat prompts and responses may include user communications and are processed to inject memory, skills, tool results, multimodal analysis results, and user-requested local conversation exports. User-selected images or videos may also be processed when the user explicitly attaches them for multimodal analysis.
+- Authentication information: optional DeepSeek API Key, OpenAI/Gemini API keys for multimodal analysis, WebDAV credentials, MCP headers, and native/local tool settings may be stored when the user configures them.
 
 Do not select financial/payment, health, location, or browsing history unless a future version adds those data types explicitly.
 
@@ -116,7 +116,7 @@ Adds right-click actions for selected page text so the user can send the selecti
 #### `nativeMessaging`
 
 ```text
-Connects to a user-configured local Native Messaging host for local MCP tools. The built-in Shell preset is disabled until the user installs the DeepSeek++ Shell host, configures it, and enables it.
+Connects to user-configured local Native Messaging hosts for local MCP tools, including the Shell host and optional Multimodal Native Host. Built-in native presets remain disabled until the user installs the matching host, configures it, and enables it.
 ```
 
 #### `offscreen`
@@ -168,7 +168,7 @@ Use the privacy policy in `docs/chrome-web-store/privacy-policy.md`. The policy 
 - Does not sell user data.
 - Does not use user data for advertising.
 - Does not transfer user data to advertising platforms, data brokers, or information resellers.
-- Uses handled data only for its disclosed user-facing features.
+- Uses handled data only for its disclosed user-facing features, including user-requested multimodal media analysis.
 - Stores data locally unless the user enables sync or connects user-configured endpoints/hosts.
 
 ## Test Instructions
@@ -186,6 +186,7 @@ Use this reviewer note:
 8. In the side panel, create a saved snippet and insert it into chat, then export saved items as Markdown or JSON.
 9. In Capabilities > Browser, enable Browser Control, choose a normal web tab, and verify the page shows a selected target. Browser Control can be disabled or detached from the same page.
 10. Optional MCP/WebDAV/native messaging features require user-provided endpoints or a user-installed local Shell host and are disabled until configured by the user.
+11. Optional multimodal media analysis requires the user to install the Multimodal Native Host, configure OpenAI/Gemini settings in Settings > Multimodal API, and attach media manually. If it is not configured, the feature remains unavailable and shows setup guidance.
 ```
 
 No test account is included because the extension works with the reviewer's own DeepSeek session.

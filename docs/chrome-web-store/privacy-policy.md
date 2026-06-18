@@ -1,14 +1,14 @@
 # DeepSeek++ Privacy Policy
 
-Effective date: 2026-06-15
+Effective date: 2026-06-18
 
-DeepSeek++ is a browser extension that enhances DeepSeek chat workflows with user-controlled memory, skills, project context, saved items, prompt presets, MCP tools, browser control tools, inline tool execution, local exports, downloadable artifacts, automation, and optional side-panel chat.
+DeepSeek++ is a browser extension that enhances DeepSeek chat workflows with user-controlled memory, skills, project context, saved items, prompt presets, MCP tools, multimodal media analysis, browser control tools, inline tool execution, local exports, downloadable artifacts, automation, and optional side-panel chat.
 
 This Privacy Policy explains what data the extension handles, how that data is used, when it may be transferred, and what controls users have.
 
 ## 1. Single Purpose
 
-DeepSeek++ has one purpose: to enhance DeepSeek chat workflows with memory, skills, projects, saved items, presets, tools, browser control, local exports, automation, and optional side-panel chat that the user controls.
+DeepSeek++ has one purpose: to enhance DeepSeek chat workflows with memory, skills, projects, saved items, presets, tools, multimodal media analysis, browser control, local exports, automation, and optional side-panel chat that the user controls.
 
 ## 2. Data Handled by the Extension
 
@@ -17,8 +17,10 @@ DeepSeek++ may handle the following data only when needed for its user-facing fe
 - DeepSeek conversation content, including prompts, model responses, and tool-call text shown on `chat.deepseek.com`.
 - User-created extension data, including memories, skills, project context, project files or source notes, saved snippets, bookmarks, prompt presets, MCP server settings, automation tasks, theme settings, background settings, pet settings, and tool execution history.
 - Optional DeepSeek API Key, when the user configures official API chat in the side panel.
+- Optional OpenAI and Gemini API keys, model names, and request URLs, when the user configures multimodal image or video analysis.
 - Optional WebDAV sync settings, including server URL, username, password, remote path, and sync state, when the user configures WebDAV sync.
 - Optional MCP configuration, including endpoint URLs, request headers, environment variables, native host names, discovered tool metadata, and tool results, when the user configures MCP tools.
+- User-selected image or video files, file names, MIME types, file sizes, and analysis results, only when the user explicitly attaches media for multimodal analysis.
 - Browser tab titles, URLs, Accessibility Tree snapshots, and browser-control tool results only when the user enables Browser Control and selects or uses a controlled tab.
 - DeepSeek session data available to the web page, only when needed to submit user-requested automation or continuation prompts.
 - DeepSeek conversation history, individual message text, saved items, generated artifact content, and attachment metadata when the user explicitly starts a local export or download.
@@ -34,6 +36,7 @@ DeepSeek++ uses handled data only to provide its disclosed features:
 - Detect tool-call markup in DeepSeek responses, execute enabled tools, and render readable tool results.
 - Return selected tool results to the active DeepSeek conversation when the user enables tool execution.
 - Send side-panel chat messages to the official DeepSeek API when the user configures a DeepSeek API Key.
+- Analyze user-selected images or videos through the local Multimodal Native Host and the user's configured OpenAI/Gemini-compatible endpoints when the user attaches media for multimodal analysis.
 - Run automation tasks created by the user.
 - Export the user's DeepSeek conversation history, individual messages, saved items, or generated artifacts into local files when the user starts an export or download.
 - Sync memories, custom skills, and presets to a user-configured WebDAV server when sync is enabled.
@@ -44,7 +47,7 @@ The extension does not use handled data for advertising, user profiling for adve
 
 ## 4. Local Storage
 
-Most extension data is stored locally in the user's browser using extension storage and IndexedDB. This includes memories, custom skills, project context, saved items, presets, settings, automation tasks, MCP configuration, DeepSeek API Key, and tool execution history.
+Most extension data is stored locally in the user's browser using extension storage and IndexedDB. This includes memories, custom skills, project context, saved items, presets, settings, automation tasks, MCP configuration, DeepSeek API Key, multimodal API settings, and tool execution history.
 
 Conversation export artifacts, saved-item exports, and generated downloadable files are created only after the user starts an export or download and are saved through the browser's local download flow. DeepSeek++ does not upload exported files.
 
@@ -58,9 +61,10 @@ Data may be transferred only as part of user-facing features:
 
 - To DeepSeek, when the user sends a chat message, runs an automation task, or allows the extension to return selected context or tool results to a DeepSeek conversation.
 - To the official DeepSeek API, when the user configures a DeepSeek API Key and sends a side-panel chat message.
+- To the local Multimodal Native Host, and from that host to user-configured OpenAI/Gemini-compatible endpoints, when the user attaches images or videos for multimodal analysis.
 - To a WebDAV server selected and configured by the user, when the user enables sync.
 - To MCP endpoints selected and configured by the user, when the user tests or executes MCP tools.
-- To a local Native Messaging host configured by the user, when local/native MCP tooling is enabled.
+- To a local Native Messaging host configured by the user, when local/native MCP or multimodal tooling is enabled.
 - To DeepSeek as text tool results, when Browser Control returns the selected tab's Accessibility Tree snapshot or action result to the active conversation.
 
 The extension does not transfer user data to advertising platforms, data brokers, information resellers, or unrelated third parties.
@@ -72,7 +76,7 @@ DeepSeek++ requests these Chrome permissions for the following purposes:
 - `storage`: store local memories, skills, project context, saved items, presets, settings, automation tasks, MCP configuration, and tool history.
 - `alarms`: schedule and wake user-created automation tasks.
 - `contextMenus`: let the user send selected page text to side-panel chat or a configured right-click scenario.
-- `nativeMessaging`: connect to user-configured local MCP/native hosts.
+- `nativeMessaging`: connect to user-configured local MCP/native hosts, including the optional Shell and Multimodal Native Hosts.
 - `offscreen`: host an invisible extension document that runs isolated JavaScript, TypeScript, Python, and HTML sandbox requests outside the DeepSeek page, preventing the chat tab from being blocked by sandbox execution.
 - `debugger`: attach to a user-selected browser tab only when Browser Control is enabled, so DeepSeek++ can read an Accessibility Tree snapshot and perform user-visible browser actions requested through `browser_*` tools.
 - `tabs`: list browser tabs and select the target tab for Browser Control. Tab group names may be shown when the browser exposes them without an additional required permission.
@@ -93,6 +97,7 @@ Users can manage extension data from the DeepSeek++ side panel. Users can:
 - Create, edit, and delete custom skills and prompt presets.
 - Change prompt controls such as memory injection, preset cadence, and response language.
 - Enable, disable, test, edit, and delete MCP servers.
+- Configure or remove multimodal API settings, install and enable the Multimodal Native Host, and attach or remove selected media before sending.
 - Enable or disable Browser Control, select the target tab, tune snapshot budgets, and detach from the current tab.
 - Create, pause, run, edit, and delete automation tasks.
 - Configure or remove the DeepSeek API Key used for official API side-panel chat.
@@ -104,7 +109,7 @@ Users can manage extension data from the DeepSeek++ side panel. Users can:
 
 DeepSeek++ stores extension data locally in the browser by default. Users should only configure trusted WebDAV servers, MCP endpoints, and Native Messaging hosts. HTTPS endpoints are recommended for remote WebDAV and MCP connections.
 
-The extension does not hardcode third-party credentials. Optional credentials, including DeepSeek API Key, are provided by the user and stored locally for the features the user configures.
+The extension does not hardcode third-party credentials. Optional credentials, including DeepSeek API Key and OpenAI/Gemini API keys, are provided by the user and stored locally for the features the user configures.
 
 ## 9. Chrome Web Store Limited Use
 
@@ -115,7 +120,7 @@ DeepSeek++ does not:
 - Sell user data.
 - Use user data for personalized advertising.
 - Transfer user data to advertising platforms, data brokers, or information resellers.
-- Use user data for purposes unrelated to memory, skills, tools, automation, sync, or extension settings.
+- Use user data for purposes unrelated to memory, skills, tools, multimodal analysis, automation, sync, or extension settings.
 
 ## 10. Children
 
@@ -135,15 +140,15 @@ For privacy or support questions, open an issue at:
 
 # DeepSeek++ 隐私政策（中文参考）
 
-生效日期：2026-06-15
+生效日期：2026-06-18
 
-DeepSeek++ 是一个浏览器扩展，用于增强 DeepSeek 对话工作流，提供用户可控的长期记忆、技能、项目上下文、保存项、提示词预设、MCP 工具、浏览器控制工具、内联工具执行、本地导出、可下载产物、自动化任务和可选侧边栏对话。
+DeepSeek++ 是一个浏览器扩展，用于增强 DeepSeek 对话工作流，提供用户可控的长期记忆、技能、项目上下文、保存项、提示词预设、MCP 工具、多模态媒体分析、浏览器控制工具、内联工具执行、本地导出、可下载产物、自动化任务和可选侧边栏对话。
 
 本隐私政策说明扩展会处理哪些数据、如何使用这些数据、何时可能传输数据，以及用户可以如何控制自己的数据。
 
 ## 1. 单一用途
 
-DeepSeek++ 的单一用途是增强 DeepSeek 对话工作流，提供由用户控制的记忆、技能、项目、保存项、预设、工具、浏览器控制、本地导出、自动化和可选侧边栏对话能力。
+DeepSeek++ 的单一用途是增强 DeepSeek 对话工作流，提供由用户控制的记忆、技能、项目、保存项、预设、工具、多模态媒体分析、浏览器控制、本地导出、自动化和可选侧边栏对话能力。
 
 ## 2. 扩展处理的数据
 
@@ -152,8 +157,10 @@ DeepSeek++ 只会在提供用户可见功能所需时处理以下数据：
 - DeepSeek 对话内容，包括 `chat.deepseek.com` 上的提示词、模型回复和工具调用文本。
 - 用户创建的扩展数据，包括记忆、技能、项目上下文、项目文件或资料说明、保存片段、书签、提示词预设、MCP 服务设置、自动化任务、主题设置、背景设置、宠物设置和工具执行历史。
 - 用户配置官方 API 侧边栏对话时提供的 DeepSeek API Key。
+- 用户配置多模态图片或视频分析时提供的 OpenAI 和 Gemini API Key、模型名称和请求地址。
 - 用户配置 WebDAV 同步时提供的同步设置，包括服务器地址、用户名、密码、远程路径和同步状态。
 - 用户配置 MCP 工具时提供的 MCP 配置，包括端点地址、请求头、环境变量、本机 host 名称、工具元数据和工具结果。
+- 用户明确附加媒体进行多模态分析时选择的图片或视频文件、文件名、MIME 类型、文件大小和分析结果。
 - 用户启用浏览器控制并选择或使用受控标签页时处理的浏览器标签页标题、URL、Accessibility Tree 快照和浏览器控制工具结果。
 - DeepSeek 网页会话中可用的会话数据，仅在执行用户请求的自动化任务或续跑提示词时使用。
 - 用户明确开始本地导出或下载时读取的 DeepSeek 对话历史、单条消息文本、保存项、生成产物内容和附件元数据。
@@ -169,6 +176,7 @@ DeepSeek++ 只会将数据用于已经披露的功能：
 - 识别 DeepSeek 回复中的工具调用标记，执行已启用的工具，并展示可读的工具结果。
 - 在用户启用工具执行时，将选定工具结果回传到当前 DeepSeek 对话。
 - 用户配置 DeepSeek API Key 时，将侧边栏对话消息发送到 DeepSeek 官方 API。
+- 用户附加媒体进行多模态分析时，通过本机多模态 Native Host 和用户配置的 OpenAI/Gemini 兼容端点分析用户选择的图片或视频。
 - 运行用户创建的自动化任务。
 - 在用户主动开始导出或下载时，将 DeepSeek 对话历史、单条消息、保存项或生成产物导出为本地文件。
 - 在用户启用同步时，将记忆、自定义技能和预设同步到用户配置的 WebDAV 服务器。
@@ -179,7 +187,7 @@ DeepSeek++ 只会将数据用于已经披露的功能：
 
 ## 4. 本地存储
 
-大多数扩展数据默认通过浏览器扩展存储和 IndexedDB 保存在用户浏览器本地，包括记忆、自定义技能、项目上下文、保存项、预设、设置、自动化任务、MCP 配置、DeepSeek API Key 和工具执行历史。
+大多数扩展数据默认通过浏览器扩展存储和 IndexedDB 保存在用户浏览器本地，包括记忆、自定义技能、项目上下文、保存项、预设、设置、自动化任务、MCP 配置、DeepSeek API Key、多模态 API 设置和工具执行历史。
 
 对话导出文件、保存项导出和生成的可下载文件只会在用户主动开始导出或下载后生成，并通过浏览器本地下载流程保存。DeepSeek++ 不会上传导出的文件。
 
@@ -193,9 +201,10 @@ DeepSeek++ 不运营用于收集扩展数据的后台服务。扩展不会出售
 
 - 当用户发送聊天消息、运行自动化任务，或允许扩展将选定上下文/工具结果回传到 DeepSeek 对话时，传输给 DeepSeek。
 - 用户配置 DeepSeek API Key 并发送侧边栏对话时，传输给 DeepSeek 官方 API。
+- 用户附加图片或视频进行多模态分析时，传输给本机多模态 Native Host，并由该 host 传输给用户配置的 OpenAI/Gemini 兼容端点。
 - 当用户启用同步时，传输给用户选择并配置的 WebDAV 服务器。
 - 当用户测试或执行 MCP 工具时，传输给用户选择并配置的 MCP 端点。
-- 当用户启用本机/Native MCP 工具时，传输给用户配置的本地 Native Messaging host。
+- 当用户启用本机/Native MCP 或多模态工具时，传输给用户配置的本地 Native Messaging host。
 - 当浏览器控制返回受控标签页的 Accessibility Tree 快照或动作结果时，作为文本工具结果传输给 DeepSeek 当前对话。
 
 扩展不会将用户数据传输给广告平台、数据经纪商、信息转售商或无关第三方。
@@ -207,7 +216,7 @@ DeepSeek++ 请求以下 Chrome 权限：
 - `storage`：保存本地记忆、技能、项目上下文、保存项、预设、设置、自动化任务、MCP 配置和工具历史。
 - `alarms`：调度和唤醒用户创建的自动化任务。
 - `contextMenus`：让用户把网页选中文本发送到侧边栏对话或已配置的右键场景。
-- `nativeMessaging`：连接用户配置的本地 MCP/native host。
+- `nativeMessaging`：连接用户配置的本地 MCP/native host，包括可选的 Shell 和多模态 Native Host。
 - `offscreen`：提供不可见的扩展文档，用于在 DeepSeek 页面之外隔离运行 JavaScript、TypeScript、Python 和 HTML 沙箱请求，避免沙箱执行阻塞聊天标签页。
 - `debugger`：仅在用户启用浏览器控制后附着到用户选择的浏览器标签页，用于读取 Accessibility Tree 快照并执行用户可见的 `browser_*` 工具动作。
 - `tabs`：列出浏览器标签页并选择浏览器控制的目标标签页；如果浏览器无需额外必需权限即可提供标签组名称，界面可能显示该信息帮助用户识别目标标签页。
@@ -228,6 +237,7 @@ DeepSeek++ 请求以下 Chrome 权限：
 - 创建、编辑和删除自定义技能和提示词预设。
 - 调整记忆注入、预设注入频率、回复语言等提示词控制。
 - 启用、禁用、测试、编辑和删除 MCP 服务。
+- 配置或移除多模态 API 设置，安装和启用多模态 Native Host，并在发送前附加或移除选中的媒体。
 - 启用或停用浏览器控制、选择目标标签页、调整快照预算，并从当前标签页断开附着。
 - 创建、暂停、运行、编辑和删除自动化任务。
 - 配置或移除用于官方 API 侧边栏对话的 DeepSeek API Key。
@@ -239,7 +249,7 @@ DeepSeek++ 请求以下 Chrome 权限：
 
 DeepSeek++ 默认将扩展数据保存在用户浏览器本地。用户应只配置可信的 WebDAV 服务器、MCP 端点和 Native Messaging host。远程 WebDAV 和 MCP 连接建议使用 HTTPS。
 
-扩展不会硬编码第三方凭据。包括 DeepSeek API Key 在内的可选凭据由用户提供，并仅为用户配置的功能本地保存和使用。
+扩展不会硬编码第三方凭据。包括 DeepSeek API Key 和 OpenAI/Gemini API Key 在内的可选凭据由用户提供，并仅为用户配置的功能本地保存和使用。
 
 ## 9. Chrome Web Store Limited Use
 
@@ -250,7 +260,7 @@ DeepSeek++ 不会：
 - 出售用户数据。
 - 将用户数据用于个性化广告。
 - 将用户数据传输给广告平台、数据经纪商或信息转售商。
-- 将用户数据用于与记忆、技能、工具、自动化、同步或扩展设置无关的用途。
+- 将用户数据用于与记忆、技能、工具、多模态分析、自动化、同步或扩展设置无关的用途。
 
 ## 10. 儿童
 

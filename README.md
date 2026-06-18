@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek++：把 DeepSeek 网页版扩展成支持中英文体验、记忆、项目、Skill、MCP、浏览器控制、保存项、产物下载、对话导出和自动化的 AI Agent 工作台</strong>
+  <strong>DeepSeek++：把 DeepSeek 网页版扩展成支持中英文体验、记忆、项目、Skill、MCP、多模态媒体、浏览器控制、保存项、产物下载、对话导出和自动化的 AI Agent 工作台</strong>
 </p>
 
 <p align="center">
@@ -29,12 +29,12 @@
   <a href="#功能速览">功能速览</a> ·
   <a href="#适合场景">适合场景</a> ·
   <a href="#安装">安装</a> ·
-  <a href="#075-变更回顾">0.7.5 变更</a>
+  <a href="#100-变更回顾">1.0.0 变更</a>
 </p>
 
 ## 产品定位
 
-DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏览器扩展，支持 Chrome、Edge 和 Firefox。它把 DeepSeek Web 扩展成 AI agent workspace，让用户在同一浏览器工作流里使用中英文界面、MCP 工具、长期记忆、Skill、系统提示词预设、联网搜索、网页读取、对话导出和定时自动化。
+DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏览器扩展，支持 Chrome、Edge 和 Firefox。它把 DeepSeek Web 扩展成 AI agent workspace，让用户在同一浏览器工作流里使用中英文界面、MCP 工具、图片/视频多模态分析、长期记忆、Skill、系统提示词预设、联网搜索、网页读取、对话导出和定时自动化。
 
 如果你在寻找 DeepSeek Chrome extension、DeepSeek MCP tools、DeepSeek memory plugin、DeepSeek conversation export 或 DeepSeek AI agent，DeepSeek++ 对应的是同一个本地优先的 DeepSeek 浏览器增强工作台。
 
@@ -46,7 +46,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - [功能速览](#功能速览)
 - [适合场景](#适合场景)
 - [核心功能](#核心功能)
-- [0.7.5 变更回顾](#075-变更回顾)
+- [1.0.0 变更回顾](#100-变更回顾)
 - [安装](#安装)
 - [友情链接](#友情链接)
 
@@ -58,6 +58,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 | DeepSeek browser extension / DeepSeek Chrome extension | 在 DeepSeek 网页版中加入侧边栏对话、右键发送文本、工具执行结果展示和 Chrome / Edge / Firefox 支持。 |
 | Multilingual DeepSeek extension / 中英文体验 | 可在简体中文和 English 之间切换，界面、内置工具说明和模型续跑行为保持同一语言。 |
 | DeepSeek MCP tools | 在侧边栏管理 MCP 服务、工具权限和执行状态，并把工具结果带回同一会话继续生成。 |
+| DeepSeek multimodal media / 图片视频分析 | 安装多模态 Native Host 后，可在 DeepSeek 输入框附加图片或视频，让 DeepSeek++ 先完成媒体分析再带着结果继续对话。 |
 | DeepSeek browser control / 浏览器控制 | 在侧边栏选择受控标签页，让 DeepSeek++ 按用户开启的边界读取页面结构并执行可见网页操作。 |
 | DeepSeek memory / 长期记忆 | 自动保存、筛选和注入长期记忆，让不同对话可以复用用户偏好、项目背景和常用信息。 |
 | DeepSeek Skills / `/skill` 工作流 | 通过内置、自定义或 GitHub 导入的 Skill 快速切换专家模式和任务模板。 |
@@ -74,6 +75,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - 希望把 DeepSeek 网页版扩展成带工具调用、MCP、记忆和自动化能力的 AI agent 工作台。
 - 希望 DeepSeek++ 的界面、工具提示和模型续跑提示能跟随中文或英文使用环境。
 - 希望在 Chrome、Edge 或 Firefox 中直接使用 DeepSeek 侧边栏对话、网页文本发送和固定场景 prompt。
+- 希望在 DeepSeek 对话中加入图片或视频，让模型基于媒体分析结果继续完成解释、总结、对比或文档任务。
 - 希望在 Chrome 或 Edge 中让 AI 操作用户选定的标签页，同时保留明确的启用、切换和断开控制。
 - 希望把项目背景、个人偏好、常用工作流和文档处理能力沉淀为长期记忆与可复用 Skill。
 - 希望把自己的 DeepSeek 对话记录本地备份为可读文件，便于归档、迁移或后续检索。
@@ -197,6 +199,8 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - **结果自动回传** — 工具执行完成后，结果自动发回同一会话继续生成，实现多轮工具调用
 - **支持 Agent 式续跑** — MCP 工具结果可以回传到原会话继续生成，支撑长任务里的多步工具执行
 - **内置多模态预设** — 可创建 `多模态` 预设，让 DeepSeek 通过 OpenAI 分析多张图片，通过 Gemini 分析视频
+- **输入框媒体附件** — 安装并启用多模态预设后，可在 DeepSeek 输入框添加图片或视频，分析结果会并入本次消息继续生成
+- **用户可控边界** — OpenAI / Gemini Key、模型和请求地址由用户在设置页配置；媒体文件只在用户主动附加并发送时进入多模态分析流程
 - **本地安全** — MCP 配置和密钥保存在浏览器本地，WebDAV 同步不会同步敏感信息
 
 <p align="center">
@@ -291,7 +295,24 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="自动化任务侧边栏">
 </p>
 
-## 0.7.5 变更回顾
+## 1.0.0 变更回顾
+
+1.0.0 是多模态媒体与侧边栏工作台成熟版本，重点让 DeepSeek++ 可以把图片、视频、MCP、本机工具和更清晰的管理界面放进同一条浏览器任务流。
+
+| 方向 | 主要变化 |
+|------|----------|
+| 多模态媒体 | 安装多模态 Native Host 后，可在 DeepSeek 输入框添加图片或视频，先通过用户配置的 OpenAI / Gemini 分析媒体，再把分析结果带回当前消息继续生成。 |
+| 多模态配置 | 侧边栏新增多模态 API 设置，可配置 OpenAI / Gemini Key、模型和请求地址，并通过 MCP 页创建、测试和启用 `多模态` 预设。 |
+| 媒体任务稳定性 | 多模态请求会按图片和视频数量扩展等待时间，减少较大媒体或多文件分析在返回前被过早中断的情况。 |
+| Artifact 展示 | 生成的 artifact 结果会显示在折叠工具块外部，正文和可下载产物更容易区分和查看。 |
+| 侧边栏整理 | 设置页拆分为通用、API、外观、数据、提示词、语音和关于等子页，MCP、工具、Skill、自动化等页面补强加载状态和确认反馈。 |
+| UI 一致性 | 工具卡片、Skill 弹窗、注入样式和侧边栏控件继续统一视觉密度、状态反馈和可访问性。 |
+| 回归覆盖 | 新增多模态媒体、Native Host 环境、MCP 折叠状态、工具块样式、侧边栏导航和注入主题测试。 |
+
+<details>
+<summary>展开 0.7.5 变更回顾</summary>
+
+### 0.7.5 变更回顾
 
 0.7.5 是 Skill 本地工作流与 Agent 输出稳定性版本，重点让用户可以更稳地导入本机 Skill、整理历史回复，并在自动化和 inline agent 任务里减少重复收尾和认证中断。
 
@@ -304,6 +325,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | Inline agent 收尾 | inline agent 会复用已有完成摘要，避免任务结束时重复生成最终总结。 |
 | 产品资产 | README 和商店素材更新为新的产品截图，侧边栏、工具执行、自动化和项目能力展示更贴近当前界面。 |
 | 回归覆盖 | 新增本地 Skill 导入、同步合并、Shell Host 本地预览、历史清理、PoW、inline agent 和注入样式测试。 |
+
+</details>
 
 <details>
 <summary>展开 0.7.4 变更回顾</summary>
